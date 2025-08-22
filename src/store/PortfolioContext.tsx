@@ -154,10 +154,16 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
       const priceChanges = await Promise.all(
         tokenIds.map(async (tokenId) => {
           try {
-            // Note: This would require additional API calls to get 24h change
-            // For now, we'll use a placeholder
-            return { tokenId, change24h: 0, changePercent: 0 };
+            // Get real 24h price change from CoinGecko API
+            const { get24hPriceChange } = await import('../utils/web3-utils');
+            const priceChange = await get24hPriceChange(tokenId);
+            return { 
+              tokenId, 
+              change24h: priceChange.price_change_24h || 0, 
+              changePercent: priceChange.price_change_percentage_24h || 0 
+            };
           } catch (error) {
+            console.error(`Error getting 24h price change for ${tokenId}:`, error);
             return { tokenId, change24h: 0, changePercent: 0 };
           }
         })
@@ -244,6 +250,34 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
       toast.success('Portfolio rates updated');
     } catch (error) {
       toast.error('Failed to refresh rates');
+    }
+  };
+
+  // Get real portfolio data
+  const getPortfolioData = async (): Promise<PortfolioData> => {
+    try {
+      const { PortfolioManager } = await import('../core/portfolio-manager');
+      const portfolioManager = new PortfolioManager();
+      
+      // Get real portfolio data from blockchain
+      const portfolio = await portfolioManager.getPortfolio();
+      
+      return {
+        totalValue: portfolio.totalUSD,
+        totalChange24h: portfolio.totalChange24h,
+        totalChangePercent: portfolio.totalChangePercent,
+        assets: portfolio.assets,
+        lastUpdated: portfolio.lastUpdated
+      };
+    } catch (error) {
+      console.error('Error getting portfolio data:', error);
+      return {
+        totalValue: 0,
+        totalChange24h: 0,
+        totalChangePercent: 0,
+        assets: [],
+        lastUpdated: Date.now()
+      };
     }
   };
 

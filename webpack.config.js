@@ -1,31 +1,20 @@
 const path = require('path');
-const webpack = require('webpack');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
+const CompressionPlugin = require('compression-webpack-plugin');
+const { DefinePlugin } = require('webpack');
 const dotenv = require('dotenv');
 
 // Load environment variables
-const env = dotenv.config().parsed || {};
-
-// Create a secure config object for the browser extension
-const createSecureConfig = () => {
-  return {
-    INFURA_PROJECT_ID: env.INFURA_PROJECT_ID || '',
-    ETHERSCAN_API_KEY: env.ETHERSCAN_API_KEY || '',
-    ALCHEMY_API_KEY: env.ALCHEMY_API_KEY || '',
-    COINGECKO_API_KEY: env.COINGECKO_API_KEY || '',
-    OPENSEA_API_KEY: env.OPENSEA_API_KEY || ''
-  };
-};
+dotenv.config();
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
-  const secureConfig = createSecureConfig();
+  const browser = env.browser || 'chrome';
 
   return {
-    mode: isProduction ? 'production' : 'development',
     entry: {
       popup: './src/popup/index.tsx',
       background: './src/background/index.ts',
@@ -54,8 +43,18 @@ module.exports = (env, argv) => {
           ]
         },
         {
-          test: /\.(png|jpg|jpeg|gif|svg)$/,
-          type: 'asset/resource'
+          test: /\.(png|jpg|jpeg|gif|svg|ico)$/,
+          type: 'asset/resource',
+          generator: {
+            filename: 'assets/[name].[hash][ext]'
+          }
+        },
+        {
+          test: /\.(woff|woff2|eot|ttf|otf)$/,
+          type: 'asset/resource',
+          generator: {
+            filename: 'fonts/[name].[hash][ext]'
+          }
         }
       ]
     },
@@ -66,50 +65,121 @@ module.exports = (env, argv) => {
       }
     },
     plugins: [
-      // Inject environment variables securely
-      new webpack.DefinePlugin({
-        'window.ENV_CONFIG': JSON.stringify(secureConfig),
-        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
+      // Environment variables
+      new DefinePlugin({
+        'process.env': JSON.stringify(process.env),
+        'process.env.NODE_ENV': JSON.stringify(argv.mode),
+        'process.env.BROWSER': JSON.stringify(browser)
       }),
-      
-      // Copy manifest and HTML files
-      new CopyWebpackPlugin({
-        patterns: [
-          { from: 'manifest.json', to: 'manifest.json' },
-          { from: 'src/popup/popup.html', to: 'popup.html' },
-          { from: 'src/options/options.html', to: 'options.html' },
-          { from: 'src/ui/popup.html', to: 'ui/popup.html' }
-        ]
-      }),
-      
-      // HTML plugins for popup and options
+
+      // HTML files
       new HtmlWebpackPlugin({
         template: './src/popup/popup.html',
         filename: 'popup.html',
         chunks: ['popup'],
-        inject: false
+        inject: true,
+        minify: isProduction ? {
+          removeComments: true,
+          collapseWhitespace: true,
+          removeRedundantAttributes: true,
+          useShortDoctype: true,
+          removeEmptyAttributes: true,
+          removeStyleLinkTypeAttributes: true,
+          keepClosingSlash: true,
+          minifyJS: true,
+          minifyCSS: true,
+          minifyURLs: true
+        } : false
       }),
-      
+
       new HtmlWebpackPlugin({
         template: './src/options/options.html',
         filename: 'options.html',
         chunks: ['options'],
-        inject: false
+        inject: true,
+        minify: isProduction ? {
+          removeComments: true,
+          collapseWhitespace: true,
+          removeRedundantAttributes: true,
+          useShortDoctype: true,
+          removeEmptyAttributes: true,
+          removeStyleLinkTypeAttributes: true,
+          keepClosingSlash: true,
+          minifyJS: true,
+          minifyCSS: true,
+          minifyURLs: true
+        } : false
       }),
-      
-      // Extract CSS
+
+      // CSS extraction
       new MiniCssExtractPlugin({
         filename: '[name].css'
-      })
+      }),
+
+      // Copy manifest and assets
+      new CopyWebpackPlugin({
+        patterns: [
+          {
+            from: 'manifest.json',
+            to: 'manifest.json',
+            transform: (content) => {
+              const manifest = JSON.parse(content.toString());
+              
+              // Update manifest for different browsers
+              if (browser === 'firefox') {
+                // Firefox specific changes
+                delete manifest.background.service_worker;
+                manifest.background.scripts = ['background.js'];
+              } else if (browser === 'edge') {
+                // Edge specific changes if needed
+              }
+              
+              return JSON.stringify(manifest, null, 2);
+            }
+          },
+          {
+            from: 'src/assets',
+            to: 'assets',
+            noErrorOnMissing: true
+          },
+          {
+            from: 'src/ui/popup.html',
+            to: 'ui/popup.html',
+            noErrorOnMissing: true
+          },
+          {
+            from: 'src/ui/styles',
+            to: 'ui/styles',
+            noErrorOnMissing: true
+          }
+        ]
+      }),
+
+      // Compression for production
+      ...(isProduction ? [
+        new CompressionPlugin({
+          test: /\.(js|css|html|svg)$/,
+          algorithm: 'gzip',
+          threshold: 10240,
+          minRatio: 0.8
+        })
+      ] : [])
     ],
     optimization: {
+      minimize: isProduction,
       minimizer: [
         new TerserPlugin({
           terserOptions: {
             compress: {
-              drop_console: isProduction
+              drop_console: isProduction,
+              drop_debugger: isProduction
+            },
+            mangle: isProduction,
+            format: {
+              comments: false
             }
-          }
+          },
+          extractComments: false
         })
       ],
       splitChunks: {
@@ -124,9 +194,23 @@ module.exports = (env, argv) => {
       }
     },
     devtool: isProduction ? false : 'cheap-module-source-map',
-    watch: !isProduction,
+    watch: argv.mode === 'development',
     watchOptions: {
-      ignored: /node_modules/
+      ignored: /node_modules/,
+      aggregateTimeout: 300,
+      poll: 1000
+    },
+    performance: {
+      hints: isProduction ? 'warning' : false,
+      maxEntrypointSize: 512000,
+      maxAssetSize: 512000
+    },
+    stats: {
+      colors: true,
+      modules: false,
+      children: false,
+      chunks: false,
+      chunkModules: false
     }
   };
 }; 

@@ -119,12 +119,47 @@ async function handleSignTransaction(message: any, sendResponse: (response: any)
       return;
     }
 
-    // In a real implementation, this would show a popup for user confirmation
-    // For now, we'll just return a mock signature
-    const mockSignature = '0x' + '0'.repeat(130);
+    const currentAccount = walletManager.getCurrentAccount();
+    if (!currentAccount) {
+      sendResponse({
+        success: false,
+        error: 'No account available'
+      });
+      return;
+    }
+
+    // Import real signing utilities
+    const { ethers } = await import('ethers');
+    const { decryptData } = await import('../utils/crypto-utils');
+    
+    // Get transaction data from message
+    const { transaction, password } = message.params;
+    
+    if (!password) {
+      sendResponse({
+        success: false,
+        error: 'Password required for signing'
+      });
+      return;
+    }
+
+    // Decrypt private key
+    const privateKey = await decryptData(currentAccount.privateKey, password);
+    if (!privateKey) {
+      sendResponse({
+        success: false,
+        error: 'Invalid password'
+      });
+      return;
+    }
+
+    // Create wallet instance and sign transaction
+    const wallet = new ethers.Wallet(privateKey);
+    const signedTx = await wallet.signTransaction(transaction);
+    
     sendResponse({
       success: true,
-      signature: mockSignature
+      signature: signedTx
     });
   } catch (error) {
     sendResponse({

@@ -108,17 +108,23 @@ export function verifyPassword(password: string, hashedPassword: string): boolea
   return hashPassword(password) === hashedPassword;
 }
 
-// Hash data (mock implementation)
-export function hashData(data: string): string {
-  // In a real implementation, use proper hashing like SHA-256
-  // For now, we'll use a simple hash
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
+// Hash data (real implementation)
+export async function hashData(data: string): Promise<string> {
+  try {
+    // Use Web Crypto API for real hashing
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+    
+    // Convert to hex string
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    return hashHex;
+  } catch (error) {
+    console.error('Error hashing data:', error);
+    throw error;
   }
-  return hash.toString(16);
 }
 
 // Generate strong password

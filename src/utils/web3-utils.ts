@@ -300,8 +300,8 @@ export async function estimateGas(
   }
 }
 
-// Get transaction count (real implementation)
-export async function getTransactionCount(address: string, network: string): Promise<number> {
+// Get transaction count (nonce) - real implementation
+export async function getTransactionCount(address: string, network: string): Promise<string> {
   try {
     const networkConfig = NETWORKS[network];
     if (!networkConfig) {
@@ -331,10 +331,117 @@ export async function getTransactionCount(address: string, network: string): Pro
       throw new Error(data.error.message);
     }
 
-    return parseInt(data.result || '0x0', 16);
+    return data.result || '0x0';
   } catch (error) {
     console.error('Error getting transaction count:', error);
-    return 0;
+    return '0x0';
+  }
+}
+
+// Sign transaction with private key - real implementation
+export async function signTransaction(
+  transaction: any,
+  privateKey: string,
+  network: string
+): Promise<string> {
+  try {
+    const { ethers } = await import('ethers');
+    
+    // Create wallet instance
+    const wallet = new ethers.Wallet(privateKey);
+    
+    // Prepare transaction object
+    const tx = {
+      to: transaction.to,
+      value: transaction.value || '0x0',
+      data: transaction.data || '0x',
+      gasLimit: transaction.gasLimit || '0x5208', // Default 21000
+      gasPrice: transaction.gasPrice || await getGasPrice(network),
+      nonce: transaction.nonce || await getTransactionCount(wallet.address, network)
+    };
+    
+    // Sign the transaction
+    const signedTx = await wallet.signTransaction(tx);
+    
+    return signedTx;
+  } catch (error) {
+    console.error('Error signing transaction:', error);
+    throw error;
+  }
+}
+
+// Send signed transaction - real implementation
+export async function sendSignedTransaction(signedTransaction: string, network: string): Promise<string> {
+  try {
+    const networkConfig = NETWORKS[network];
+    if (!networkConfig) {
+      throw new Error(`Unsupported network: ${network}`);
+    }
+
+    const response = await fetch(networkConfig.rpcUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_sendRawTransaction',
+        params: [signedTransaction],
+        id: 1
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
+
+    return data.result;
+  } catch (error) {
+    console.error('Error sending signed transaction:', error);
+    throw error;
+  }
+}
+
+// Sign message - real implementation
+export async function signMessage(message: string, privateKey: string): Promise<string> {
+  try {
+    const { ethers } = await import('ethers');
+    
+    const wallet = new ethers.Wallet(privateKey);
+    const signature = await wallet.signMessage(message);
+    
+    return signature;
+  } catch (error) {
+    console.error('Error signing message:', error);
+    throw error;
+  }
+}
+
+// Sign typed data - real implementation
+export async function signTypedData(
+  typedData: any,
+  privateKey: string
+): Promise<string> {
+  try {
+    const { ethers } = await import('ethers');
+    
+    const wallet = new ethers.Wallet(privateKey);
+    const signature = await wallet.signTypedData(
+      typedData.domain,
+      typedData.types,
+      typedData.value
+    );
+    
+    return signature;
+  } catch (error) {
+    console.error('Error signing typed data:', error);
+    throw error;
   }
 }
 
@@ -522,45 +629,124 @@ export async function getTokenTransactions(address: string, network: string, con
   }
 }
 
-// Get token price from CoinGecko (deactivated - using mock data)
-export async function getTokenPrice(tokenId: string, vsCurrency: string = 'usd'): Promise<number> {
-  // Mock pricing data - CoinGecko deactivated
-  const mockPrices: Record<string, number> = {
-    'ethereum': 2500.00,
-    'binancecoin': 300.00,
-    'matic-network': 0.80,
-    'avalanche-2': 25.00,
-    'bitcoin': 45000.00,
-    'solana': 100.00,
-    'tron': 0.08,
-    'litecoin': 75.00,
-    'the-open-network': 2.50,
-    'ripple': 0.60
-  };
+// Get token price from CoinGecko (real implementation)
+export async function getTokenPrice(tokenId: string): Promise<number> {
+  try {
+    const config = getConfig();
+    const apiKey = config.COINGECKO_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('CoinGecko API key required for token pricing');
+    }
 
-  return mockPrices[tokenId] || 0;
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd&x_cg_demo_api_key=${apiKey}`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    return data[tokenId]?.usd || 0;
+  } catch (error) {
+    console.error('Error getting token price:', error);
+    return 0;
+  }
 }
 
-// Get multiple token prices (deactivated - using mock data)
-export async function getMultipleTokenPrices(tokenIds: string[], vsCurrency: string = 'usd'): Promise<Record<string, number>> {
-  // Mock pricing data - CoinGecko deactivated
-  const mockPrices: Record<string, number> = {
-    'ethereum': 2500.00,
-    'binancecoin': 300.00,
-    'matic-network': 0.80,
-    'avalanche-2': 25.00,
-    'bitcoin': 45000.00,
-    'solana': 100.00,
-    'tron': 0.08,
-    'litecoin': 75.00,
-    'the-open-network': 2.50,
-    'ripple': 0.60
-  };
+// Get multiple token prices (real implementation)
+export async function getTokenPrices(tokenIds: string[]): Promise<Record<string, number>> {
+  try {
+    const config = getConfig();
+    const apiKey = config.COINGECKO_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('CoinGecko API key required for token pricing');
+    }
 
-  const prices: Record<string, number> = {};
-  tokenIds.forEach(id => {
-    prices[id] = mockPrices[id] || 0;
-  });
+    const ids = tokenIds.join(',');
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&x_cg_demo_api_key=${apiKey}`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-  return prices;
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    const prices: Record<string, number> = {};
+    tokenIds.forEach(id => {
+      prices[id] = data[id]?.usd || 0;
+    });
+
+    return prices;
+  } catch (error) {
+    console.error('Error getting token prices:', error);
+    return {};
+  }
+} 
+
+// Get 24h price change from CoinGecko (real implementation)
+export async function get24hPriceChange(tokenId: string): Promise<any> {
+  try {
+    const config = getConfig();
+    const apiKey = config.COINGECKO_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('CoinGecko API key required for price change data');
+    }
+
+    const url = `https://api.coingecko.com/api/v3/coins/${tokenId}/market_chart?vs_currency=usd&days=1&x_cg_demo_api_key=${apiKey}`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    // Calculate 24h price change
+    const prices = data.prices;
+    if (prices && prices.length >= 2) {
+      const currentPrice = prices[prices.length - 1][1];
+      const previousPrice = prices[0][1];
+      const priceChange = currentPrice - previousPrice;
+      const priceChangePercent = ((priceChange / previousPrice) * 100);
+      
+      return {
+        price_change_24h: priceChange,
+        price_change_percentage_24h: priceChangePercent,
+        current_price: currentPrice
+      };
+    }
+
+    return {
+      price_change_24h: 0,
+      price_change_percentage_24h: 0,
+      current_price: 0
+    };
+  } catch (error) {
+    console.error('Error getting 24h price change:', error);
+    return {
+      price_change_24h: 0,
+      price_change_percentage_24h: 0,
+      current_price: 0
+    };
+  }
 } 

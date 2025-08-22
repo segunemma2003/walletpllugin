@@ -22,41 +22,40 @@ export interface WalletAccount {
 }
 
 // Generate HD wallet from seed phrase (real implementation)
-export function generateHDWallet(
+export async function generateHDWallet(
   seedPhrase: string, 
   network: string = 'ethereum', 
   derivationPath: string = "m/44'/60'/0'/0/0"
-): HDWallet {
-  if (!validateBIP39SeedPhrase(seedPhrase)) {
-    throw new Error('Invalid seed phrase');
+): Promise<HDWallet> {
+  try {
+    const { ethers } = await import('ethers');
+    const * as bip39 = await import('bip39');
+    
+    // Validate seed phrase
+    if (!bip39.validateMnemonic(seedPhrase)) {
+      throw new Error('Invalid seed phrase');
+    }
+    
+    // Generate seed from mnemonic
+    const seed = await bip39.mnemonicToSeed(seedPhrase);
+    
+    // Create HD node
+    const hdNode = ethers.HDNodeWallet.fromSeed(seed);
+    
+    // Derive wallet from path
+    const derivedWallet = hdNode.derivePath(derivationPath);
+    
+    return {
+      address: derivedWallet.address,
+      privateKey: derivedWallet.privateKey,
+      publicKey: derivedWallet.publicKey,
+      mnemonic: seedPhrase,
+      derivationPath: derivationPath
+    };
+  } catch (error) {
+    console.error('Error generating HD wallet:', error);
+    throw error;
   }
-
-  // Generate seed from mnemonic
-  const seed = bip39.mnemonicToSeedSync(seedPhrase);
-  
-  // Create HD key
-  const hdkey = HDKey.fromMasterSeed(seed);
-  
-  // Derive child key
-  const childKey = hdkey.derive(derivationPath);
-  
-  // Get private key
-  const privateKey = '0x' + childKey.privateKey.toString('hex');
-  
-  // Get public key
-  const publicKey = '0x' + childKey.publicKey.toString('hex');
-  
-  // Generate address from public key
-  const address = ethers.getAddress(ethers.computeAddress(publicKey));
-
-  return {
-    seedPhrase,
-    privateKey,
-    publicKey,
-    address,
-    network,
-    derivationPath
-  };
 }
 
 // Derive wallet from seed phrase (real implementation)
@@ -72,13 +71,13 @@ export async function deriveWalletFromSeed(seedPhrase: string, network: string =
   }
 
   const derivationPath = getDerivationPath(network);
-  const wallet = generateHDWallet(seedPhrase, network, derivationPath);
+  const wallet = await generateHDWallet(seedPhrase, network, derivationPath);
   
   return {
     privateKey: wallet.privateKey,
     publicKey: wallet.publicKey,
     address: wallet.address,
-    seedPhrase: wallet.seedPhrase,
+    seedPhrase: wallet.mnemonic,
     derivationPath: wallet.derivationPath
   };
 }
@@ -122,24 +121,27 @@ export function importWalletFromPrivateKey(
   privateKey: string,
   network: string = 'ethereum'
 ): HDWallet {
-  // Validate private key format
   if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
     throw new Error('Invalid private key format');
   }
 
-  // In a real implementation, this would derive the public key and address
-  // For now, we'll generate mock values
-  const publicKey = '0x' + privateKey.substring(2).padEnd(128, '0');
-  const address = '0x' + privateKey.substring(2).padEnd(40, '0');
+  // Real implementation: derive public key and address from private key
+  try {
+    const wallet = new ethers.Wallet(privateKey);
+    const publicKey = wallet.publicKey;
+    const address = wallet.address;
 
-  return {
-    seedPhrase: '', // Not available when importing from private key
-    privateKey,
-    publicKey,
-    address,
-    network,
-    derivationPath: 'm/44\'/60\'/0\'/0/0'
-  };
+    return {
+      seedPhrase: '', // Not available when importing from private key
+      privateKey,
+      publicKey,
+      address,
+      network,
+      derivationPath: 'm/44\'/60\'/0\'/0/0'
+    };
+  } catch (error) {
+    throw new Error('Invalid private key');
+  }
 }
 
 // Import wallet from seed phrase
@@ -188,7 +190,7 @@ export async function seedPhraseToPrivateKey(seedPhrase: string, derivationPath:
     throw new Error('Invalid seed phrase');
   }
 
-  const derivedWallet = generateHDWallet(seedPhrase, 'ethereum', derivationPath);
+  const derivedWallet = await generateHDWallet(seedPhrase, 'ethereum', derivationPath);
   return derivedWallet.privateKey;
 }
 

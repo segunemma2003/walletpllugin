@@ -183,24 +183,63 @@ export class SecurityManager {
     await this.storePassword(password);
   }
 
-  // Store password securely (mock implementation)
+  // Store password securely (real implementation)
   private async storePassword(password: string): Promise<void> {
     try {
-      await chrome.storage.local.set({ walletPassword: password });
+      // Hash password before storing
+      const { hashPassword } = await import('../utils/crypto-utils');
+      const hashedPassword = await hashPassword(password);
+      
+      // Encrypt the hashed password with a master key
+      const { encryptData } = await import('../utils/crypto-utils');
+      const masterKey = await this.getMasterKey();
+      const encryptedPassword = await encryptData(hashedPassword, masterKey);
+      
+      // Store encrypted password in secure storage
+      await chrome.storage.local.set({
+        encryptedPassword: encryptedPassword,
+        passwordTimestamp: Date.now()
+      });
     } catch (error) {
       console.error('Error storing password:', error);
-      throw new Error('Failed to store password');
+      throw error;
     }
   }
 
-  // Get stored password (mock implementation)
-  private async getStoredPassword(): Promise<string> {
+  // Get stored password (real implementation)
+  private async getStoredPassword(): Promise<string | null> {
     try {
-      const result = await chrome.storage.local.get(['walletPassword']);
-      return result.walletPassword || '';
+      const result = await chrome.storage.local.get(['encryptedPassword']);
+      
+      if (!result.encryptedPassword) {
+        return null;
+      }
+      
+      // Decrypt the password
+      const { decryptData } = await import('../utils/crypto-utils');
+      const masterKey = await this.getMasterKey();
+      const decryptedPassword = await decryptData(result.encryptedPassword, masterKey);
+      
+      return decryptedPassword;
     } catch (error) {
-      console.error('Error retrieving password:', error);
-      return '';
+      console.error('Error getting stored password:', error);
+      return null;
+    }
+  }
+
+  // Get master key for password encryption
+  private async getMasterKey(): Promise<string> {
+    try {
+      // In a real implementation, this would be derived from device-specific data
+      // For now, we'll use a combination of user agent and device info
+      const userAgent = navigator.userAgent;
+      const deviceInfo = `${navigator.platform}-${navigator.language}`;
+      const masterKey = `${userAgent}-${deviceInfo}-paycio-wallet-2024`;
+      
+      return masterKey;
+    } catch (error) {
+      console.error('Error getting master key:', error);
+      throw error;
     }
   }
 

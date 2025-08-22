@@ -14,6 +14,7 @@ export type ScreenId =
   | 'nfts'
   | 'portfolio'
   | 'transactions'
+  | 'walletconnect'
   | 'loading'
   | 'error';
 
@@ -54,8 +55,14 @@ export interface Transaction {
   timestamp: number;
   gasUsed?: string;
   gasPrice?: string;
-  nonce: number;
+  nonce?: number;
   data?: string;
+  blockNumber?: string;
+  confirmations?: number;
+  isTokenTransaction?: boolean;
+  tokenName?: string;
+  tokenSymbol?: string;
+  tokenValue?: string;
 }
 
 export interface NFT {

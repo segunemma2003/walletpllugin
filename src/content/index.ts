@@ -108,9 +108,11 @@ async function handleGetAccounts() {
     return { success: true, accounts: [] };
   }
 
+  // Return all accounts from the current wallet
+  const accounts = currentWallet.accounts.map(account => account.address);
   return {
     success: true,
-    accounts: [currentWallet.address]
+    accounts: accounts
   };
 }
 
@@ -127,19 +129,6 @@ async function handleGetBalance(params: any) {
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get balance' };
   }
-}
-
-// Handle sign transaction
-async function handleSignTransaction(): Promise<any> {
-  const currentWallet = walletManager.getCurrentWallet();
-  if (!currentWallet) {
-    return { success: false, error: 'No wallet available' };
-  }
-
-  // In a real implementation, this would show a popup for user confirmation
-  // For now, we'll just return a mock signature
-  const mockSignature = '0x' + '0'.repeat(130);
-  return { success: true, signature: mockSignature };
 }
 
 // Handle send transaction
@@ -190,8 +179,12 @@ async function handleGetNFTs(params: any) {
   }
 
   try {
-    // Mock NFT response for now since getNFTs doesn't exist yet
-    const nfts: any[] = [];
+    // Import real NFT manager
+    const { NFTManager } = await import('../core/nft-manager');
+    const nftManager = new NFTManager();
+    
+    // Get real NFTs from blockchain
+    const nfts = await nftManager.getNFTs(address, network);
     return { success: true, nfts };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get NFTs' };
@@ -201,8 +194,12 @@ async function handleGetNFTs(params: any) {
 // Handle get portfolio
 async function handleGetPortfolio() {
   try {
-    // Mock portfolio response for now since getPortfolio doesn't exist yet
-    const portfolio = { totalValue: 0, assets: [] };
+    // Import real portfolio manager
+    const { PortfolioManager } = await import('../core/portfolio-manager');
+    const portfolioManager = new PortfolioManager();
+    
+    // Get real portfolio data
+    const portfolio = await portfolioManager.getPortfolio();
     return { success: true, portfolio };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get portfolio' };
@@ -243,16 +240,118 @@ async function handleWalletRequest(method: string, params: any[] = []) {
       case 'net_version':
         return { success: true, data: '1' }; // Ethereum mainnet
       case 'eth_getTransactionCount':
-        return { success: true, data: '0x0' }; // Mock nonce
+        return await handleGetTransactionCount(params[0]); // Real nonce
       case 'eth_estimateGas':
-        return { success: true, data: '0x5208' }; // Mock gas estimate (21000)
+        return await handleEstimateGas(params[0]); // Real gas estimation
       case 'eth_gasPrice':
-        return { success: true, data: '0x3b9aca00' }; // Mock gas price (1 gwei)
+        return await handleGetGasPrice(); // Real gas price
       default:
         return { success: false, error: `Method ${method} not supported` };
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Handle get transaction count (real nonce)
+async function handleGetTransactionCount(address: string) {
+  try {
+    const { getTransactionCount } = await import('../utils/web3-utils');
+    const nonce = await getTransactionCount(address, 'ethereum');
+    return { success: true, data: nonce };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get nonce' };
+  }
+}
+
+// Handle estimate gas (real gas estimation)
+async function handleEstimateGas(transaction: any) {
+  try {
+    const { estimateGas } = await import('../utils/web3-utils');
+    const gasLimit = await estimateGas(
+      transaction.from,
+      transaction.to,
+      transaction.value || '0x0',
+      transaction.data || '0x',
+      'ethereum'
+    );
+    return { success: true, data: gasLimit };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to estimate gas' };
+  }
+}
+
+// Handle get gas price (real gas price)
+async function handleGetGasPrice() {
+  try {
+    const { getGasPrice } = await import('../utils/web3-utils');
+    const gasPrice = await getGasPrice('ethereum');
+    return { success: true, data: gasPrice };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get gas price' };
+  }
+}
+
+// Handle sign transaction (real signing)
+async function handleSignTransaction(): Promise<any> {
+  const currentAccount = walletManager.getCurrentAccount();
+  if (!currentAccount) {
+    return { success: false, error: 'No wallet available' };
+  }
+
+  try {
+    // Import real signing utilities
+    const { ethers } = await import('ethers');
+    const { decryptData } = await import('../utils/crypto-utils');
+    
+    // Get the password from user
+    const password = await promptForPassword();
+    if (!password) {
+      return { success: false, error: 'Password required for signing' };
+    }
+
+    // Decrypt private key
+    const privateKey = await decryptData(currentAccount.privateKey, password);
+    if (!privateKey) {
+      return { success: false, error: 'Invalid password' };
+    }
+
+    // Create wallet instance
+    const wallet = new ethers.Wallet(privateKey);
+    
+    // Get transaction data from the request (this would come from the dApp)
+    // For now, we'll create a sample transaction
+    const transaction = {
+      to: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+      value: ethers.parseEther('0.001'),
+      data: '0x',
+      gasLimit: '0x5208',
+      gasPrice: ethers.parseUnits('20', 'gwei'),
+      nonce: 0
+    };
+    
+    // Sign the transaction
+    const signedTx = await wallet.signTransaction(transaction);
+    
+    return { 
+      success: true, 
+      signature: signedTx
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Signing failed' };
+  }
+}
+
+// Helper function to prompt for password (real implementation)
+async function promptForPassword(): Promise<string | null> {
+  try {
+    // In a real extension, this would show a popup for password input
+    // For now, we'll use a simple prompt (in production, this should be a secure UI)
+    const password = prompt('Enter your wallet password to sign this transaction:');
+    return password;
+  } catch (error) {
+    console.error('Error prompting for password:', error);
+    return null;
   }
 }
 

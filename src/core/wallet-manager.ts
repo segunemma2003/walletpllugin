@@ -1,6 +1,6 @@
 import * as bip39 from 'bip39';
 import { ethers } from 'ethers';
-import { encryptPrivateKey, decryptPrivateKey } from '../utils/crypto-utils';
+import { encryptData, decryptData } from '../utils/crypto-utils';
 import { deriveWalletFromSeed } from '../utils/key-derivation';
 
 export interface WalletAccount {
@@ -74,7 +74,7 @@ export class WalletManager {
   private generateSeedPhrase(): string {
     // Generate 128 bits (12 words) of entropy
     const entropy = ethers.randomBytes(16);
-    return bip39.entropyToMnemonic(entropy);
+    return bip39.entropyToMnemonic(ethers.hexlify(entropy));
   }
 
   // Validate seed phrase
@@ -86,10 +86,10 @@ export class WalletManager {
   async createWallet(request: CreateWalletRequest): Promise<WalletData> {
     try {
       // Generate real seed phrase
-    const seedPhrase = this.generateSeedPhrase();
+      const seedPhrase = this.generateSeedPhrase();
       
       // Encrypt seed phrase
-      const encryptedSeedPhrase = await encryptPrivateKey(seedPhrase, request.password);
+      const encryptedSeedPhrase = await encryptData(seedPhrase, request.password);
       
       // Derive wallet accounts
       const accounts = await this.deriveAccounts(seedPhrase, request.network, request.accountCount || 1);
@@ -103,12 +103,12 @@ export class WalletManager {
         network: request.network,
         createdAt: Date.now(),
         lastAccessed: Date.now()
-    };
+      };
 
-    this.wallets.push(wallet);
-    await this.saveWallets();
+      this.wallets.push(wallet);
+      await this.saveWallets();
 
-    return wallet;
+      return wallet;
     } catch (error) {
       console.error('Failed to create wallet:', error);
       throw error;
@@ -124,7 +124,7 @@ export class WalletManager {
       }
 
       // Encrypt seed phrase
-      const encryptedSeedPhrase = await encryptPrivateKey(request.seedPhrase, request.password);
+      const encryptedSeedPhrase = await encryptData(request.seedPhrase, request.password);
       
       // Derive wallet accounts
       const accounts = await this.deriveAccounts(request.seedPhrase, request.network, request.accountCount || 1);
@@ -138,12 +138,12 @@ export class WalletManager {
         network: request.network,
         createdAt: Date.now(),
         lastAccessed: Date.now()
-    };
+      };
 
-    this.wallets.push(wallet);
-    await this.saveWallets();
+      this.wallets.push(wallet);
+      await this.saveWallets();
 
-    return wallet;
+      return wallet;
     } catch (error) {
       console.error('Failed to import wallet:', error);
       throw error;
@@ -218,7 +218,7 @@ export class WalletManager {
     }
 
     // Decrypt seed phrase
-    const seedPhrase = await decryptPrivateKey(wallet.encryptedSeedPhrase, password);
+    const seedPhrase = await decryptData(wallet.encryptedSeedPhrase, password);
     if (!seedPhrase) {
       throw new Error('Invalid password');
     }
@@ -272,7 +272,7 @@ export class WalletManager {
       throw new Error('Wallet not found');
     }
 
-    const seedPhrase = await decryptPrivateKey(wallet.encryptedSeedPhrase, password);
+    const seedPhrase = await decryptData(wallet.encryptedSeedPhrase, password);
     if (!seedPhrase) {
       throw new Error('Invalid password');
     }
@@ -288,13 +288,13 @@ export class WalletManager {
     }
 
     // Decrypt with old password
-    const seedPhrase = await decryptPrivateKey(wallet.encryptedSeedPhrase, oldPassword);
+    const seedPhrase = await decryptData(wallet.encryptedSeedPhrase, oldPassword);
     if (!seedPhrase) {
       throw new Error('Invalid old password');
     }
 
     // Encrypt with new password
-    const newEncryptedSeedPhrase = await encryptPrivateKey(seedPhrase, newPassword);
+    const newEncryptedSeedPhrase = await encryptData(seedPhrase, newPassword);
     
     wallet.encryptedSeedPhrase = newEncryptedSeedPhrase;
     wallet.lastAccessed = Date.now();
@@ -342,7 +342,7 @@ export class WalletManager {
     }
 
     try {
-      const seedPhrase = await decryptPrivateKey(wallet.encryptedSeedPhrase, password);
+      const seedPhrase = await decryptData(wallet.encryptedSeedPhrase, password);
       return !!seedPhrase;
     } catch (error) {
       return false;
@@ -363,7 +363,7 @@ export class WalletManager {
       throw new Error('Wallet not found');
     }
 
-    const seedPhrase = await decryptPrivateKey(wallet.encryptedSeedPhrase, password);
+    const seedPhrase = await decryptData(wallet.encryptedSeedPhrase, password);
     if (!seedPhrase) {
       throw new Error('Invalid password');
     }
@@ -400,5 +400,71 @@ export class WalletManager {
       console.error('Failed to restore wallet:', error);
       throw new Error('Invalid backup data');
     }
+  }
+
+  // Get current wallet (first wallet or specified wallet)
+  getCurrentWallet(): WalletData | null {
+    if (this.wallets.length === 0) {
+      return null;
+    }
+    
+    // Return the most recently accessed wallet
+    const sortedWallets = [...this.wallets].sort((a, b) => b.lastAccessed - a.lastAccessed);
+    return sortedWallets[0];
+  }
+
+  // Get current account (first account of current wallet)
+  getCurrentAccount(): WalletAccount | null {
+    const currentWallet = this.getCurrentWallet();
+    if (!currentWallet || currentWallet.accounts.length === 0) {
+      return null;
+    }
+    
+    return currentWallet.accounts[0];
+  }
+
+  // Get balance for an account
+  async getBalance(address: string, network: string): Promise<string> {
+    try {
+      const account = this.getAccountByAddress(address);
+      if (!account) {
+        throw new Error('Account not found');
+      }
+
+      // Import the getRealBalance function
+      const { getRealBalance } = await import('../utils/web3-utils');
+      const balance = await getRealBalance(address, network);
+      
+      // Update account balance
+      await this.updateAccountBalance(address, balance);
+      
+      return balance;
+    } catch (error) {
+      console.error('Error getting balance:', error);
+      return '0';
+    }
+  }
+
+  // Switch network for current wallet
+  async switchNetwork(networkId: string): Promise<void> {
+    const currentWallet = this.getCurrentWallet();
+    if (!currentWallet) {
+      throw new Error('No wallet available');
+    }
+
+    currentWallet.network = networkId;
+    currentWallet.lastAccessed = Date.now();
+    
+    await this.saveWallets();
+  }
+
+  // Get all accounts from all wallets
+  getAllAccounts(): WalletAccount[] {
+    return this.wallets.flatMap(wallet => wallet.accounts);
+  }
+
+  // Get accounts for a specific network
+  getAccountsByNetwork(network: string): WalletAccount[] {
+    return this.getAllAccounts().filter(account => account.network === network);
   }
 } 

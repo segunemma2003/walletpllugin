@@ -163,9 +163,20 @@ export class CrossChainBridge {
     // Get gas price for estimation
     const gasPrice = await getGasPrice(fromChain);
     
+    // Get real sender address from wallet manager
+    const { WalletManager } = await import('../core/wallet-manager');
+    const walletManager = new WalletManager();
+    const currentAccount = walletManager.getCurrentAccount();
+    
+    if (!currentAccount) {
+      throw new Error('No wallet account available for cross-chain transfer');
+    }
+    
+    const fromAddress = currentAccount.address;
+
     // Estimate gas for bridge transaction
     const gasEstimate = await estimateGas(
-      '0x0000000000000000000000000000000000000000', // from address (placeholder)
+      fromAddress,
       routes[0].bridge.includes('Polygon') ? '0xA0c68C638235ee32657e8f720a23ceC1bFc77C77' : '0x0000000000000000000000000000000000000000',
       amount,
       '0x', // data
@@ -184,74 +195,49 @@ export class CrossChainBridge {
     };
   }
 
-  // Execute bridge transaction
-  async executeBridgeTransaction(
+  // Execute real cross-chain transfer
+  async executeTransfer(
     fromChain: string,
     toChain: string,
-    fromAddress: string,
-    toAddress: string,
+    token: string,
     amount: string,
-    token: string = 'ETH',
-    privateKey: string
-  ): Promise<BridgeTransaction> {
+    recipient: string
+  ): Promise<TransferResult> {
     try {
-      const routes = this.getAvailableRoutes(fromChain, toChain);
-      if (routes.length === 0) {
-        throw new Error('No bridge routes available');
+      // Get real bridge configuration
+      const bridgeConfig = this.getBridgeConfig(fromChain, toChain, token);
+      
+      if (!bridgeConfig) {
+        throw new Error(`No bridge available for ${fromChain} to ${toChain}`);
       }
-
-      const bestRoute = routes.reduce((best, current) => 
-        current.fee < best.fee ? current : best
-      );
-
-      // Create provider
-      const provider = new ethers.JsonRpcProvider(this.getRpcUrl(fromChain));
-      const wallet = new ethers.Wallet(privateKey, provider);
-
-      // Bridge contract ABI (simplified)
-      const bridgeABI = [
-        'function bridgeAsset(address token, uint256 amount, address recipient, uint256 destinationChainId, bool forceUpdateGlobalExitRoot, bool permitData) external',
-        'function bridgeMessage(address destinationAddress, uint256 destinationChainId, bool forceUpdateGlobalExitRoot, bytes permitData) external payable'
-      ];
-
-      const bridgeContract = new ethers.Contract(
-        this.getBridgeContract(fromChain, toChain),
-        bridgeABI,
-        wallet
-      );
-
-      // Prepare transaction
-      const tx = await bridgeContract.bridgeAsset.populateTransaction(
-        ethers.ZeroAddress, // token address (ETH)
-        amount,
-        toAddress,
-        this.getChainId(toChain),
-        false, // forceUpdateGlobalExitRoot
-        '0x' // permitData
-      );
-
-      // Send transaction
-      const response = await wallet.sendTransaction(tx);
-      const receipt = await response.wait();
-
-      const bridgeTx: BridgeTransaction = {
-        id: `${fromChain}-${toChain}-${Date.now()}`,
+      
+      // Import real bridge implementations
+      const { executeBridgeTransfer } = await import('./bridge-implementations');
+      
+      // Execute real bridge transfer
+      const result = await executeBridgeTransfer({
+        bridge: bridgeConfig.bridge,
         fromChain,
         toChain,
-        fromAddress,
-        toAddress,
-        amount,
         token,
-        bridge: bestRoute.bridge,
-        status: 'pending',
-        txHash: receipt.hash,
-        estimatedTime: bestRoute.estimatedTime,
-        createdAt: Date.now()
+        amount,
+        recipient,
+        bridgeConfig
+      });
+      
+      return {
+        success: true,
+        txHash: result.txHash,
+        bridgeTxHash: result.bridgeTxHash,
+        estimatedTime: result.estimatedTime,
+        fees: result.fees
       };
-
-      return bridgeTx;
     } catch (error) {
-      throw new Error(`Bridge transaction failed: ${error}`);
+      console.error('Error executing cross-chain transfer:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Transfer failed'
+      };
     }
   }
 
@@ -327,6 +313,40 @@ export class CrossChainBridge {
     const routeKey = `${fromChain}-${toChain}`;
     const provider = BRIDGE_PROVIDERS[routeKey as keyof typeof BRIDGE_PROVIDERS];
     return provider?.contract || '0x0000000000000000000000000000000000000000';
+  }
+
+  // Get real bridge configuration
+  private getBridgeConfig(fromChain: string, toChain: string, token: string): BridgeConfig | null {
+    // Real bridge configurations for major bridges
+    const bridgeConfigs: Record<string, BridgeConfig> = {
+      'ethereum-polygon-usdc': {
+        bridge: 'polygon-bridge',
+        contractAddress: '0xA0c68C638235ee32657e8f720a23ceC1bFc77C77',
+        minAmount: '0.001',
+        maxAmount: '1000000',
+        fees: '0.1%',
+        estimatedTime: 15 * 60 * 1000 // 15 minutes
+      },
+      'ethereum-bsc-usdt': {
+        bridge: 'multichain',
+        contractAddress: '0x3F5c5bd7d4C3E8e225Ee55F4d4C8CF23C7455F5f',
+        minAmount: '0.001',
+        maxAmount: '1000000',
+        fees: '0.1%',
+        estimatedTime: 10 * 60 * 1000 // 10 minutes
+      },
+      'ethereum-arbitrum-eth': {
+        bridge: 'arbitrum-bridge',
+        contractAddress: '0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a',
+        minAmount: '0.001',
+        maxAmount: '1000',
+        fees: '0.05%',
+        estimatedTime: 5 * 60 * 1000 // 5 minutes
+      }
+    };
+    
+    const key = `${fromChain}-${toChain}-${token}`;
+    return bridgeConfigs[key] || null;
   }
 }
 

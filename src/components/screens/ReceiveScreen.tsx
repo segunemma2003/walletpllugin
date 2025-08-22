@@ -1,22 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Copy, Check, Download, Share2 } from 'lucide-react';
+import { ArrowLeft, Copy, Share2, Download, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useWallet } from '../../store/WalletContext';
 import toast from 'react-hot-toast';
 import type { ScreenProps } from '../../types/index';
 
 const ReceiveScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
-  const { wallet } = useWallet();
+  const { wallet, currentNetwork } = useWallet();
   const [copied, setCopied] = useState(false);
-  const [qrCodeData, setQrCodeData] = useState('');
+  const [qrSize, setQrSize] = useState(200);
+
+  // Generate real QR code for wallet address
+  const generateQRCode = (address: string): string => {
+    // Create a proper QR code data string for cryptocurrency addresses
+    // This includes the network prefix for better wallet compatibility
+    const networkPrefix = currentNetwork?.symbol?.toLowerCase() || 'eth';
+    return `${networkPrefix}:${address}`;
+  };
 
   useEffect(() => {
     if (wallet?.address) {
       // Generate QR code data URL for the address
-      const qrData = `ethereum:${wallet.address}`;
-      setQrCodeData(qrData);
+      const qrData = generateQRCode(wallet.address);
+      setQrSize(200); // Ensure QR size is 200 for qrcode.react
     }
-  }, [wallet?.address]);
+  }, [wallet?.address, currentNetwork?.symbol]);
 
   const copyAddress = async () => {
     if (!wallet?.address) return;
@@ -32,7 +41,7 @@ const ReceiveScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
   };
 
   const downloadQRCode = () => {
-    if (!qrCodeData) return;
+    if (!wallet?.address) return;
     
     // Create a simple QR code using canvas (in a real app, you'd use a QR library)
     const canvas = document.createElement('canvas');
@@ -131,10 +140,7 @@ const ReceiveScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
           
           {/* QR Code Placeholder */}
           <div className="mx-auto mb-4 w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-            <div className="text-center">
-              <div className="text-gray-500 text-sm mb-2">QR Code</div>
-              <div className="text-xs text-gray-400">(QR library needed)</div>
-            </div>
+            <QRCodeSVG value={generateQRCode(wallet.address)} size={qrSize} />
           </div>
 
           {/* Address Display */}
