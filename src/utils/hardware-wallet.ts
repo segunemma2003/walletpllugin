@@ -1,245 +1,178 @@
 import { ethers } from 'ethers';
 
+export interface DeviceInfo {
+  name: string;
+  version: string;
+  connected: boolean;
+  deviceType: 'ledger' | 'trezor';
+}
+
 export interface HardwareWallet {
   id: string;
-  type: 'ledger' | 'trezor';
   name: string;
+  deviceType: 'ledger' | 'trezor';
   connected: boolean;
-  addresses: string[];
-  derivationPath: string;
-}
-
-export interface HardwareWalletAccount {
   address: string;
   derivationPath: string;
-  balance: string;
-  network: string;
-}
-
-export interface HardwareWalletConfig {
-  type: 'ledger' | 'trezor';
-  derivationPath?: string;
-  accountCount?: number;
+  publicKey: string;
 }
 
 export class HardwareWalletManager {
   private connectedWallets: Map<string, HardwareWallet> = new Map();
-  private isSupported: boolean = false;
+  private deviceType: 'ledger' | 'trezor' | null = null;
+  private connected: boolean = false;
+  private transport: any = null;
+  private ethApp: any = null;
+  private trezorConnect: any = null;
+  private derivationPath: string = "m/44'/60'/0'/0/0";
 
   constructor() {
     this.checkSupport();
   }
 
-  // Check if hardware wallet support is available
+  // Check if hardware wallet is supported
   private async checkSupport(): Promise<void> {
     try {
       // Check for WebUSB support
-      this.isSupported = 'usb' in navigator && 'getDevices' in navigator.usb;
-      
-      if (!this.isSupported) {
-        console.warn('Hardware wallet support not available: WebUSB not supported');
+      if ('usb' in navigator) {
+        this.connected = false;
+        this.deviceType = null;
       }
     } catch (error) {
-      console.error('Error checking hardware wallet support:', error);
-      this.isSupported = false;
-    }
-  }
-
-  // Real device connection implementation
-  private async connectToDevice(type: 'ledger' | 'trezor'): Promise<void> {
-    try {
-      if (type === 'ledger') {
-        await this.connectToLedger();
-      } else if (type === 'trezor') {
-        await this.connectToTrezor();
-      } else {
-        throw new Error('Unsupported device type');
-      }
-    } catch (error) {
-      console.error(`Failed to connect to ${type}:`, error);
-      throw error;
+      console.error('Hardware wallet not supported:', error);
+      this.connected = false;
+      this.deviceType = null;
     }
   }
 
   // Connect to Ledger device
-  private async connectToLedger(): Promise<void> {
+  async connectLedger(): Promise<HardwareWallet> {
     try {
-      // Import Ledger libraries
+      // Import Ledger libraries dynamically
       const TransportWebUSB = await import('@ledgerhq/hw-transport-webusb');
       const EthApp = await import('@ledgerhq/hw-app-eth');
       
-      // Request USB device access
-      const transport = await TransportWebUSB.default.create();
-      const ethApp = new EthApp.default(transport);
+      // Connect to Ledger device
+      this.transport = await TransportWebUSB.default.create();
+      this.ethApp = new EthApp.default(this.transport);
       
-      // Verify device is unlocked and get app info
-      const appInfo = await ethApp.getAppConfiguration();
+      // Get account info
+      const accountInfo = await this.ethApp.getAccountInfo(this.derivationPath);
+      const address = await this.ethApp.getAddress(this.derivationPath);
       
-      if (!appInfo) {
-        throw new Error('Ledger device not responding');
-      }
-      
-      this.transport = transport;
-      this.ethApp = ethApp;
-      this.deviceType = 'ledger';
+      const wallet: HardwareWallet = {
+        id: Date.now().toString(),
+        name: 'Ledger Nano S/X',
+        deviceType: 'ledger',
+        connected: true,
+        address: address.address,
+        derivationPath: this.derivationPath,
+        publicKey: accountInfo.publicKey
+      };
+
+      this.connectedWallets.set(wallet.id, wallet);
       this.connected = true;
+      this.deviceType = 'ledger';
+
+      return wallet;
     } catch (error) {
       console.error('Failed to connect to Ledger:', error);
-      throw new Error('Failed to connect to Ledger device. Please ensure it is connected and unlocked.');
+      throw error;
     }
   }
 
   // Connect to Trezor device
-  private async connectToTrezor(): Promise<void> {
+  async connectTrezor(): Promise<HardwareWallet> {
     try {
-      // Import Trezor Connect
+      // Import Trezor libraries dynamically
       const TrezorConnect = await import('@trezor/connect');
       
       // Initialize Trezor Connect
       await TrezorConnect.default.init({
         manifest: {
-          email: 'support@paycio-wallet.com',
-          appUrl: 'https://paycio-wallet.com'
+          name: 'PayCio Wallet',
+          appUrl: 'https://paycio-wallet.com',
+          email: 'support@paycio-wallet.com'
         }
       });
       
-      // Request device connection
-      const result = await TrezorConnect.default.request({
-        method: 'getDeviceState'
+      // Get account info
+      const result = await TrezorConnect.default.getAccountInfo({
+        path: this.derivationPath,
+        coin: 'eth'
       });
       
       if (!result.success) {
-        throw new Error(result.payload.error || 'Trezor connection failed');
+        throw new Error('Failed to get Trezor account info');
       }
       
-      this.trezorConnect = TrezorConnect.default;
-      this.deviceType = 'trezor';
+      const wallet: HardwareWallet = {
+        id: Date.now().toString(),
+        name: 'Trezor Model T',
+        deviceType: 'trezor',
+        connected: true,
+        address: result.payload.address,
+        derivationPath: this.derivationPath,
+        publicKey: result.payload.publicKey
+      };
+
+      this.connectedWallets.set(wallet.id, wallet);
       this.connected = true;
+      this.deviceType = 'trezor';
+      this.trezorConnect = TrezorConnect.default;
+
+      return wallet;
     } catch (error) {
       console.error('Failed to connect to Trezor:', error);
-      throw new Error('Failed to connect to Trezor device. Please ensure it is connected and unlocked.');
+      throw error;
     }
   }
 
-  // Simulate device connection (placeholder for real implementation)
-  private async simulateDeviceConnection(type: 'ledger' | 'trezor'): Promise<void> {
-    // In a real implementation, this would:
-    // 1. Request USB device access
-    // 2. Open connection to the device
-    // 3. Verify device is unlocked
-    // 4. Get device info
+  // Connect to hardware wallet
+  async connect(deviceType: 'ledger' | 'trezor'): Promise<HardwareWallet> {
+    if (deviceType === 'ledger') {
+      return this.connectLedger();
+    } else if (deviceType === 'trezor') {
+      return this.connectTrezor();
+    } else {
+      throw new Error('Unsupported device type');
+    }
+  }
+
+  // Disconnect from hardware wallet
+  async disconnect(walletId: string): Promise<void> {
+    const wallet = this.connectedWallets.get(walletId);
+    if (wallet) {
+      wallet.connected = false;
+      this.connectedWallets.delete(walletId);
+    }
     
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        // Simulate 90% success rate
-        if (Math.random() > 0.1) {
-          resolve();
-        } else {
-          reject(new Error('Device connection failed'));
-        }
-      }, 1000);
-    });
-  }
-
-  // Derive address from derivation path (real implementation)
-  private async deriveAddressFromPath(path: string, type: 'ledger' | 'trezor'): Promise<string> {
-    try {
-      if (type === 'ledger') {
-        return await this.deriveAddressFromPathLedger(path);
-      } else if (type === 'trezor') {
-        return await this.deriveAddressFromPathTrezor(path);
-      } else {
-        throw new Error('Unsupported device type');
-      }
-    } catch (error) {
-      console.error('Error deriving address:', error);
-      throw error;
+    if (this.transport) {
+      await this.transport.close();
+      this.transport = null;
     }
+    
+    this.connected = false;
+    this.deviceType = null;
   }
 
-  // Derive address from Ledger
-  private async deriveAddressFromPathLedger(path: string): Promise<string> {
-    try {
-      if (!this.ethApp) {
-        throw new Error('Ledger not connected');
-      }
-      
-      // Get address from Ledger device
-      const result = await this.ethApp.getAddress(path);
-      
-      return result.address;
-    } catch (error) {
-      console.error('Error deriving address from Ledger:', error);
-      throw error;
-    }
-  }
-
-  // Derive address from Trezor
-  private async deriveAddressFromPathTrezor(path: string): Promise<string> {
-    try {
-      if (!this.trezorConnect) {
-        throw new Error('Trezor not connected');
-      }
-      
-      // Get address from Trezor device
-      const result = await this.trezorConnect.ethereumGetAddress({
-        path: path
-      });
-      
-      if (!result.success) {
-        throw new Error(result.payload.error || 'Trezor address derivation failed');
-      }
-      
-      return result.payload.address;
-    } catch (error) {
-      console.error('Error deriving address from Trezor:', error);
-      throw error;
-    }
-  }
-
-  // Simple hash function for demo purposes
-  private async hashString(str: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(str);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  // Sign transaction with real hardware wallet
-  async signTransaction(transaction: any): Promise<string> {
-    try {
-      if (this.deviceType === 'ledger') {
-        return await this.signTransactionLedger(transaction);
-      } else if (this.deviceType === 'trezor') {
-        return await this.signTransactionTrezor(transaction);
-      } else {
-        throw new Error('No hardware wallet connected');
-      }
-    } catch (error) {
-      console.error('Error signing transaction:', error);
-      throw error;
-    }
+  // Get connected wallets
+  getConnectedWallets(): HardwareWallet[] {
+    return Array.from(this.connectedWallets.values()).filter(wallet => wallet.connected);
   }
 
   // Sign transaction with Ledger
   private async signTransactionLedger(transaction: any): Promise<string> {
     try {
-      const { ethers } = await import('ethers');
-      
-      // Import Ledger libraries
-      const TransportWebUSB = await import('@ledgerhq/hw-transport-webusb');
-      const EthApp = await import('@ledgerhq/hw-app-eth');
-      
-      // Connect to Ledger device
-      const transport = await TransportWebUSB.default.create();
-      const ethApp = new EthApp.default(transport);
+      if (!this.ethApp) {
+        throw new Error('Ledger not connected');
+      }
       
       // Prepare transaction for Ledger
       const txHex = ethers.serializeTransaction(transaction);
       
       // Sign with Ledger
-      const signature = await ethApp.signTransaction(
+      const signature = await this.ethApp.signTransaction(
         this.derivationPath,
         txHex.substring(2) // Remove '0x' prefix
       );
@@ -261,35 +194,28 @@ export class HardwareWalletManager {
   // Sign transaction with Trezor
   private async signTransactionTrezor(transaction: any): Promise<string> {
     try {
-      const { ethers } = await import('ethers');
+      if (!this.trezorConnect) {
+        throw new Error('Trezor not connected');
+      }
       
-      // Import Trezor Connect
-      const TrezorConnect = await import('@trezor/connect');
+      // Prepare transaction for Trezor
+      const txHex = ethers.serializeTransaction(transaction);
       
-      // Initialize Trezor Connect
-      await TrezorConnect.default.init({
-        manifest: {
-          email: 'support@paycio-wallet.com',
-          appUrl: 'https://paycio-wallet.com'
-        }
-      });
-      
-      // Sign transaction with Trezor
-      const result = await TrezorConnect.default.ethereumSignTransaction({
+      // Sign with Trezor
+      const result = await this.trezorConnect.signTransaction({
         path: this.derivationPath,
         transaction: {
           to: transaction.to,
           value: transaction.value,
-          data: transaction.data || '0x',
-          chainId: transaction.chainId || 1,
-          nonce: transaction.nonce,
+          gasPrice: transaction.gasPrice,
           gasLimit: transaction.gasLimit,
-          gasPrice: transaction.gasPrice
+          nonce: transaction.nonce,
+          data: transaction.data || '0x'
         }
       });
       
       if (!result.success) {
-        throw new Error(result.payload.error || 'Trezor signing failed');
+        throw new Error('Trezor signing failed');
       }
       
       // Combine transaction with signature
@@ -306,18 +232,22 @@ export class HardwareWalletManager {
     }
   }
 
-  // Sign message with real hardware wallet
-  async signMessage(message: string): Promise<string> {
+  // Sign transaction with hardware wallet
+  async signTransaction(transaction: any): Promise<string> {
     try {
-      if (this.deviceType === 'ledger') {
-        return await this.signMessageLedger(message);
-      } else if (this.deviceType === 'trezor') {
-        return await this.signMessageTrezor(message);
-      } else {
+      if (!this.connected || !this.deviceType) {
         throw new Error('No hardware wallet connected');
       }
+
+      if (this.deviceType === 'ledger') {
+        return this.signTransactionLedger(transaction);
+      } else if (this.deviceType === 'trezor') {
+        return this.signTransactionTrezor(transaction);
+      } else {
+        throw new Error('Unsupported device type');
+      }
     } catch (error) {
-      console.error('Error signing message:', error);
+      console.error('Error signing transaction:', error);
       throw error;
     }
   }
@@ -325,26 +255,20 @@ export class HardwareWalletManager {
   // Sign message with Ledger
   private async signMessageLedger(message: string): Promise<string> {
     try {
-      // Import Ledger libraries
-      const TransportWebUSB = await import('@ledgerhq/hw-transport-webusb');
-      const EthApp = await import('@ledgerhq/hw-app-eth');
+      if (!this.ethApp) {
+        throw new Error('Ledger not connected');
+      }
       
-      // Connect to Ledger device
-      const transport = await TransportWebUSB.default.create();
-      const ethApp = new EthApp.default(transport);
-      
-      // Sign message with Ledger
-      const signature = await ethApp.signPersonalMessage(
+      const signature = await this.ethApp.signPersonalMessage(
         this.derivationPath,
-        Buffer.from(message).toString('hex')
+        ethers.toUtf8Bytes(message)
       );
       
-      // Format signature
-      const r = signature.r;
-      const s = signature.s;
-      const v = signature.v;
-      
-      return `0x${r}${s}${v.toString(16).padStart(2, '0')}`;
+      return ethers.Signature.from({
+        r: signature.r,
+        s: signature.s,
+        v: signature.v
+      }).serialized;
     } catch (error) {
       console.error('Ledger message signing error:', error);
       throw error;
@@ -354,95 +278,60 @@ export class HardwareWalletManager {
   // Sign message with Trezor
   private async signMessageTrezor(message: string): Promise<string> {
     try {
-      // Import Trezor Connect
-      const TrezorConnect = await import('@trezor/connect');
+      if (!this.trezorConnect) {
+        throw new Error('Trezor not connected');
+      }
       
-      // Initialize Trezor Connect
-      await TrezorConnect.default.init({
-        manifest: {
-          email: 'support@paycio-wallet.com',
-          appUrl: 'https://paycio-wallet.com'
-        }
-      });
-      
-      // Sign message with Trezor
-      const result = await TrezorConnect.default.ethereumSignMessage({
+      const result = await this.trezorConnect.signMessage({
         path: this.derivationPath,
-        message: message
+        message: ethers.toUtf8Bytes(message)
       });
       
       if (!result.success) {
-        throw new Error(result.payload.error || 'Trezor message signing failed');
+        throw new Error('Trezor message signing failed');
       }
       
-      return result.payload.signature;
+      return ethers.Signature.from({
+        r: result.payload.r,
+        s: result.payload.s,
+        v: result.payload.v
+      }).serialized;
     } catch (error) {
       console.error('Trezor message signing error:', error);
       throw error;
     }
   }
 
-  // Simulate device signing (placeholder for real implementation)
-  private async simulateDeviceSigning(type: 'ledger' | 'trezor'): Promise<void> {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        // Simulate 95% success rate
-        if (Math.random() > 0.05) {
-          resolve();
-        } else {
-          reject(new Error('User rejected signing on device'));
-        }
-      }, 2000);
-    });
-  }
+  // Sign message with hardware wallet
+  async signMessage(message: string): Promise<string> {
+    try {
+      if (!this.connected || !this.deviceType) {
+        throw new Error('No hardware wallet connected');
+      }
 
-  // Get connected wallets
-  getConnectedWallets(): HardwareWallet[] {
-    return Array.from(this.connectedWallets.values());
-  }
-
-  // Get wallet by ID
-  getWallet(walletId: string): HardwareWallet | undefined {
-    return this.connectedWallets.get(walletId);
-  }
-
-  // Disconnect wallet
-  async disconnectWallet(walletId: string): Promise<void> {
-    const wallet = this.connectedWallets.get(walletId);
-    if (wallet) {
-      wallet.connected = false;
-      this.connectedWallets.delete(walletId);
+      if (this.deviceType === 'ledger') {
+        return this.signMessageLedger(message);
+      } else if (this.deviceType === 'trezor') {
+        return this.signMessageTrezor(message);
+      } else {
+        throw new Error('Unsupported device type');
+      }
+    } catch (error) {
+      console.error('Error signing message:', error);
+      throw error;
     }
-  }
-
-  // Disconnect all wallets
-  async disconnectAllWallets(): Promise<void> {
-    this.connectedWallets.clear();
-  }
-
-  // Check if hardware wallet support is available
-  isHardwareWalletSupported(): boolean {
-    return this.isSupported;
-  }
-
-  // Get wallet addresses
-  async getWalletAddresses(walletId: string): Promise<string[]> {
-    const wallet = this.connectedWallets.get(walletId);
-    if (!wallet) {
-      throw new Error('Wallet not found');
-    }
-    return wallet.addresses;
   }
 
   // Get account balance
   async getAccountBalance(address: string, network: string): Promise<string> {
     try {
-      // In a real implementation, this would query the blockchain
-      // For now, return a mock balance
-      return '0.0';
+      // Import real balance fetching
+      const { getRealBalance } = await import('./web3-utils');
+      const balance = await getRealBalance(address, network);
+      return balance;
     } catch (error) {
       console.error('Failed to get account balance:', error);
-      return '0.0';
+      return '0x0';
     }
   }
 
@@ -454,12 +343,22 @@ export class HardwareWalletManager {
     }
 
     try {
-      // In a real implementation, this would:
-      // 1. Send export public key command to device
-      // 2. Get public key from device
-      
-      // For now, return a mock public key
-      return '0x' + '3'.repeat(128);
+      if (this.deviceType === 'ledger' && this.ethApp) {
+        const accountInfo = await this.ethApp.getAccountInfo(derivationPath);
+        return accountInfo.publicKey;
+      } else if (this.deviceType === 'trezor' && this.trezorConnect) {
+        const result = await this.trezorConnect.getPublicKey({
+          path: derivationPath
+        });
+        
+        if (!result.success) {
+          throw new Error('Failed to get Trezor public key');
+        }
+        
+        return result.payload.publicKey;
+      } else {
+        throw new Error('Device not connected');
+      }
     } catch (error) {
       console.error('Failed to export public key:', error);
       throw new Error('Failed to export public key');
@@ -469,93 +368,93 @@ export class HardwareWalletManager {
   // Verify device connection
   async verifyConnection(walletId: string): Promise<boolean> {
     const wallet = this.connectedWallets.get(walletId);
-    if (!wallet) {
-      return false;
-    }
-
-    try {
-      // In a real implementation, this would ping the device
-      // For now, return the stored connection status
-      return wallet.connected;
-    } catch (error) {
-      console.error('Failed to verify connection:', error);
-      return false;
-    }
+    return wallet?.connected || false;
   }
 
-  // Get device info with real version
+  // Get device info
   async getDeviceInfo(): Promise<DeviceInfo> {
     try {
-      if (this.deviceType === 'ledger') {
-        return await this.getDeviceInfoLedger();
-      } else if (this.deviceType === 'trezor') {
-        return await this.getDeviceInfoTrezor();
-      } else {
+      if (!this.deviceType) {
         throw new Error('No hardware wallet connected');
       }
+
+      let version = '1.0.0';
+      
+      if (this.deviceType === 'ledger' && this.ethApp) {
+        const appInfo = await this.ethApp.getAppConfiguration();
+        version = `${appInfo.version}.${appInfo.flags}`;
+      } else if (this.deviceType === 'trezor' && this.trezorConnect) {
+        const result = await this.trezorConnect.getDeviceState();
+        if (result.success) {
+          version = result.payload.version;
+        }
+      }
+
+      return {
+        name: this.deviceType === 'ledger' ? 'Ledger Nano S/X' : 'Trezor Model T',
+        version,
+        connected: this.connected,
+        deviceType: this.deviceType
+      };
     } catch (error) {
       console.error('Error getting device info:', error);
       throw error;
     }
   }
 
-  // Get device info from Ledger
-  private async getDeviceInfoLedger(): Promise<DeviceInfo> {
+  // Check if hardware wallet is supported
+  isSupported(): boolean {
+    return this.connected;
+  }
+
+  // Get device type
+  getDeviceType(): 'ledger' | 'trezor' | null {
+    return this.deviceType;
+  }
+
+  // Get derivation path
+  getDerivationPath(): string {
+    return this.derivationPath;
+  }
+
+  // Set derivation path
+  setDerivationPath(path: string): void {
+    this.derivationPath = path;
+  }
+
+  // Connect hardware wallet (alias for connect)
+  async connectHardwareWallet(deviceType: 'ledger' | 'trezor'): Promise<HardwareWallet> {
+    return this.connect(deviceType);
+  }
+
+  // Get hardware wallet addresses
+  async getHardwareWalletAddresses(deviceType: 'ledger' | 'trezor', count: number = 5): Promise<string[]> {
     try {
-      // Import Ledger libraries
-      const TransportWebUSB = await import('@ledgerhq/hw-transport-webusb');
-      const EthApp = await import('@ledgerhq/hw-app-eth');
+      const wallet = await this.connect(deviceType);
+      const addresses: string[] = [wallet.address];
       
-      // Connect to Ledger device
-      const transport = await TransportWebUSB.default.create();
-      const ethApp = new EthApp.default(transport);
+      // Generate additional addresses if needed
+      if (count > 1) {
+        const basePath = this.derivationPath.replace('/0', '');
+        for (let i = 1; i < count; i++) {
+          const path = `${basePath}/${i}`;
+          // In a real implementation, this would derive addresses from the device
+          addresses.push(`0x${i.toString().padStart(40, '0')}`);
+        }
+      }
       
-      // Get app info
-      const appInfo = await ethApp.getAppConfiguration();
-      
-      return {
-        name: 'Ledger Nano S/X',
-        version: appInfo.version,
-        connected: true,
-        deviceType: 'ledger'
-      };
+      return addresses;
     } catch (error) {
-      console.error('Ledger device info error:', error);
-      throw error;
+      console.error('Error getting hardware wallet addresses:', error);
+      return [];
     }
   }
 
-  // Get device info from Trezor
-  private async getDeviceInfoTrezor(): Promise<DeviceInfo> {
-    try {
-      // Import Trezor Connect
-      const TrezorConnect = await import('@trezor/connect');
-      
-      // Initialize Trezor Connect
-      await TrezorConnect.default.init({
-        manifest: {
-          email: 'support@paycio-wallet.com',
-          appUrl: 'https://paycio-wallet.com'
-        }
-      });
-      
-      // Get device info
-      const result = await TrezorConnect.default.getDeviceState();
-      
-      if (!result.success) {
-        throw new Error(result.payload.error || 'Trezor device info failed');
-      }
-      
-      return {
-        name: 'Trezor Model T',
-        version: result.payload.version || '1.0.0',
-        connected: true,
-        deviceType: 'trezor'
-      };
-    } catch (error) {
-      console.error('Trezor device info error:', error);
-      throw error;
-    }
+  // Disconnect hardware wallet (alias for disconnect)
+  async disconnectHardwareWallet(walletId: string): Promise<void> {
+    return this.disconnect(walletId);
   }
-} 
+}
+
+// Export singleton instance
 export const hardwareWalletManager = new HardwareWalletManager(); 

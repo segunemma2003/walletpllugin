@@ -1,3 +1,6 @@
+import { ethers } from 'ethers';
+import { NetworkConfig } from '../types';
+
 export interface NetworkConfig {
   name: string;
   symbol: string;
@@ -345,9 +348,6 @@ export async function signTransaction(
   network: string
 ): Promise<string> {
   try {
-    const { ethers } = await import('ethers');
-    
-    // Create wallet instance
     const wallet = new ethers.Wallet(privateKey);
     
     // Prepare transaction object
@@ -411,8 +411,6 @@ export async function sendSignedTransaction(signedTransaction: string, network: 
 // Sign message - real implementation
 export async function signMessage(message: string, privateKey: string): Promise<string> {
   try {
-    const { ethers } = await import('ethers');
-    
     const wallet = new ethers.Wallet(privateKey);
     const signature = await wallet.signMessage(message);
     
@@ -429,8 +427,6 @@ export async function signTypedData(
   privateKey: string
 ): Promise<string> {
   try {
-    const { ethers } = await import('ethers');
-    
     const wallet = new ethers.Wallet(privateKey);
     const signature = await wallet.signTypedData(
       typedData.domain,
@@ -750,3 +746,74 @@ export async function get24hPriceChange(tokenId: string): Promise<any> {
     };
   }
 } 
+
+// Add missing exports
+export const getNetworkConfig = (network: string): NetworkConfig => {
+  const networks = {
+    ethereum: {
+      rpcUrl: `https://mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,
+      explorerUrl: 'https://api.etherscan.io/api',
+      apiKey: process.env.ETHERSCAN_API_KEY || ''
+    },
+    polygon: {
+      rpcUrl: `https://polygon-rpc.com`,
+      explorerUrl: 'https://api.polygonscan.com/api',
+      apiKey: process.env.POLYGONSCAN_API_KEY || ''
+    },
+    bsc: {
+      rpcUrl: 'https://bsc-dataseed.binance.org',
+      explorerUrl: 'https://api.bscscan.com/api',
+      apiKey: process.env.BSCSCAN_API_KEY || ''
+    }
+  };
+  
+  return networks[network as keyof typeof networks] || networks.ethereum;
+};
+
+export const getMultipleTokenPrices = async (tokenAddresses: string[]): Promise<Record<string, number>> => {
+  try {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${tokenAddresses.join(',')}&vs_currencies=usd`
+    );
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching multiple token prices:', error);
+    return {};
+  }
+};
+
+export const parseBigInt = (value: string | number): bigint => {
+  if (typeof value === 'string') {
+    return BigInt(value);
+  }
+  return BigInt(value);
+}; 
+
+// Add missing getProvider export
+export const getProvider = (network: string) => {
+  const config = getNetworkConfig(network);
+  return new ethers.JsonRpcProvider(config.rpcUrl);
+}; 
+
+// Add missing sendTransaction export
+export const sendTransaction = async (transaction: any, privateKey: string): Promise<string> => {
+  try {
+    const wallet = new ethers.Wallet(privateKey);
+    const provider = new ethers.JsonRpcProvider(transaction.rpcUrl || 'https://mainnet.infura.io/v3/your-project-id');
+    const connectedWallet = wallet.connect(provider);
+    
+    const tx = await connectedWallet.sendTransaction({
+      to: transaction.to,
+      value: ethers.parseEther(transaction.value || '0'),
+      gasPrice: transaction.gasPrice ? ethers.parseUnits(transaction.gasPrice, 'gwei') : undefined,
+      gasLimit: transaction.gasLimit ? BigInt(transaction.gasLimit) : BigInt(21000),
+      data: transaction.data || '0x'
+    });
+    
+    return tx.hash;
+  } catch (error) {
+    console.error('Error sending transaction:', error);
+    throw error;
+  }
+}; 

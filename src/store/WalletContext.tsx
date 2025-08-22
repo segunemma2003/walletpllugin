@@ -1,349 +1,350 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import toast from 'react-hot-toast';
-import { getRealBalance } from '../utils/web3-utils';
-import { generateBIP39SeedPhrase, validateBIP39SeedPhrase, hashPassword, verifyPassword } from '../utils/crypto-utils';
-import { deriveWalletFromSeed } from '../utils/key-derivation';
-import { 
-  WalletData, 
-  WalletState, 
-  WalletContextType, 
-  Network
-} from '../types/index';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { WalletManager } from '../core/wallet-manager';
+import { NetworkManager } from '../core/network-manager';
+import { Wallet, WalletState, WalletContextType, Network } from '../types';
+import { encryptData, decryptData } from '../utils/crypto-utils';
+import { generateHDWallet } from '../utils/key-derivation';
 
-// Initial state
-const initialState: WalletState = {
-  wallet: null,
-  isWalletUnlocked: false,
-  hasWallet: false,
-  balances: {},
-  isLoading: false,
-  error: null,
-  isWalletCreated: false,
-  isInitializing: false,
-  address: null,
-  currentNetwork: null,
-  networks: [],
-  accounts: [],
-  privateKey: null
-};
+interface WalletStateExtended extends WalletState {
+  wallet?: Wallet | null;
+  isWalletUnlocked?: boolean;
+  currentNetwork?: Network | null;
+  isInitializing?: boolean;
+  isWalletCreated?: boolean;
+  hasWallet?: boolean;
+  balances?: Record<string, string>;
+  networks?: Network[];
+  address?: string;
+}
 
-// Action types
-type WalletAction =
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_ERROR'; payload: string | null }
-  | { type: 'SET_INITIALIZING'; payload: boolean }
-  | { type: 'SET_WALLET_CREATED'; payload: boolean }
-  | { type: 'SET_WALLET'; payload: WalletData }
-  | { type: 'SET_WALLET_UNLOCKED'; payload: boolean }
-  | { type: 'SET_BALANCES'; payload: Record<string, string> }
-  | { type: 'SET_CURRENT_NETWORK'; payload: Network }
-  | { type: 'SET_HAS_WALLET'; payload: boolean }
-  | { type: 'LOCK_WALLET' }
-  | { type: 'CLEAR_WALLET' };
-
-// Reducer
-const walletReducer = (state: WalletState, action: WalletAction): WalletState => {
-  switch (action.type) {
-    case 'SET_LOADING':
-      return { ...state, isLoading: action.payload };
-    case 'SET_ERROR':
-      return { ...state, error: action.payload };
-    case 'SET_INITIALIZING':
-      return { ...state, isInitializing: action.payload };
-    case 'SET_WALLET_CREATED':
-      return { ...state, isWalletCreated: action.payload };
-    case 'SET_WALLET':
-      return { 
-        ...state, 
-        wallet: action.payload,
-        address: action.payload.address,
-        accounts: [action.payload.address],
-        isWalletUnlocked: true,
-        hasWallet: true
-      };
-    case 'SET_WALLET_UNLOCKED':
-      return { ...state, isWalletUnlocked: action.payload };
-    case 'SET_BALANCES':
-      return { ...state, balances: { ...state.balances, ...action.payload } };
-    case 'SET_CURRENT_NETWORK':
-      return { ...state, currentNetwork: action.payload };
-    case 'SET_HAS_WALLET':
-      return { ...state, hasWallet: action.payload };
-    case 'LOCK_WALLET':
-      return { 
-        ...state, 
-        isWalletUnlocked: false,
-        privateKey: null
-      };
-    case 'CLEAR_WALLET':
-      return { 
-        ...state, 
-        wallet: null,
-        isWalletUnlocked: false,
-        hasWallet: false,
-        balances: {},
-        address: null,
-        accounts: [],
-        privateKey: null,
-        isInitializing: false
-      };
-    default:
-      return state;
-  }
-};
-
-// Create context
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-// Provider component
-export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, dispatch] = useReducer(walletReducer, initialState);
+export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [state, setState] = useState<WalletStateExtended>({
+    wallets: [],
+    currentWallet: null,
+    isUnlocked: false,
+    isLoading: false,
+    error: null,
+    wallet: null,
+    isWalletUnlocked: false,
+    currentNetwork: null,
+    isInitializing: true,
+    isWalletCreated: false,
+    hasWallet: false,
+    balances: {},
+    networks: [],
+    address: ''
+  });
 
-  // Initialize wallet on mount
-  useEffect(() => {
-    initializeWallet();
-  }, []);
-
-  // Auto-update balances when wallet is unlocked
-  useEffect(() => {
-    if (state.isWalletUnlocked && state.address) {
-      updateAllBalances();
-    }
-  }, [state.isWalletUnlocked, state.address]);
+  const walletManager = new WalletManager();
+  const networkManager = new NetworkManager();
 
   // Initialize wallet
-  const initializeWallet = async (): Promise<void> => {
+  const initializeWallet = async () => {
+    setState(prev => ({ ...prev, isInitializing: true }));
     try {
-      dispatch({ type: 'SET_INITIALIZING', payload: true });
+      const wallets = await walletManager.getWallets();
+      const hasWallet = wallets.length > 0;
       
-      // Check if wallet exists in storage
-      const storedWallet = await getStoredWallet();
-      if (storedWallet) {
-        dispatch({ type: 'SET_WALLET_CREATED', payload: true });
-        dispatch({ type: 'SET_WALLET', payload: storedWallet });
-      }
+      setState(prev => ({
+        ...prev,
+        wallets,
+        hasWallet,
+        isInitializing: false,
+        isWalletCreated: hasWallet
+      }));
     } catch (error) {
-      toast.error('Failed to initialize wallet');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to initialize wallet' });
-    } finally {
-      dispatch({ type: 'SET_INITIALIZING', payload: false });
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to initialize wallet',
+        isInitializing: false
+      }));
     }
   };
 
-  // Create new wallet with real implementation
-  const createWallet = async (name: string, network: string): Promise<void> => {
+  // Unlock wallet
+  const unlockWallet = async (password: string): Promise<void> => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-
-      // Generate real BIP39 seed phrase
-      const seedPhrase = generateBIP39SeedPhrase();
-      
-      // Derive wallet from seed phrase
-      const walletData = await deriveWalletFromSeed(seedPhrase, network);
-      
-      const wallet: WalletData = {
-        id: Date.now().toString(),
-        name,
-        address: walletData.address,
-        privateKey: walletData.privateKey,
-        publicKey: walletData.publicKey,
-        seedPhrase: walletData.seedPhrase,
-        network,
-        derivationPath: walletData.derivationPath,
-        createdAt: Date.now()
-      };
-
-      // Store wallet securely
-      await storeWallet(wallet);
-      
-      dispatch({ type: 'SET_WALLET', payload: wallet });
-      dispatch({ type: 'SET_WALLET_CREATED', payload: true });
-      dispatch({ type: 'SET_HAS_WALLET', payload: true });
-      toast.success('Wallet created successfully');
-    } catch (error) {
-      toast.error('Failed to create wallet');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to create wallet' });
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
-  };
-
-  // Import wallet from seed phrase with real implementation
-  const importWallet = async (seedPhrase: string, network: string): Promise<void> => {
-    try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-
-      // Validate seed phrase
-      if (!validateBIP39SeedPhrase(seedPhrase)) {
-        throw new Error('Invalid seed phrase');
-      }
-
-      // Derive wallet from seed phrase
-      const walletData = await deriveWalletFromSeed(seedPhrase, network);
-      
-      const wallet: WalletData = {
-        id: Date.now().toString(),
-        name: 'Imported Wallet',
-        address: walletData.address,
-        privateKey: walletData.privateKey,
-        publicKey: walletData.publicKey,
-        seedPhrase: walletData.seedPhrase,
-        network,
-        derivationPath: walletData.derivationPath,
-        createdAt: Date.now()
-      };
-
-      // Store wallet securely
-      await storeWallet(wallet);
-      
-      dispatch({ type: 'SET_WALLET', payload: wallet });
-      dispatch({ type: 'SET_WALLET_CREATED', payload: true });
-      dispatch({ type: 'SET_HAS_WALLET', payload: true });
-      toast.success('Wallet imported successfully');
-    } catch (error) {
-      toast.error('Failed to import wallet');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to import wallet' });
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
-  };
-
-  // Unlock wallet with real password verification
-  const unlockWallet = async (password: string): Promise<boolean> => {
-    try {
-      const storedWallet = await getStoredWallet();
-      if (!storedWallet) {
-        throw new Error('No wallet found');
-      }
-
-      // Get stored password hash
-      const storedHash = await getStoredPasswordHash();
-      if (!storedHash) {
-        // First time unlock, create password hash
-        const hash = await hashPassword(password);
-        await storePasswordHash(hash);
-        dispatch({ type: 'SET_WALLET_UNLOCKED', payload: true });
-        toast.success('Wallet unlocked successfully');
-        return true;
-      }
-
-      // Verify password
-      const isValid = await verifyPassword(password, storedHash);
-      if (isValid) {
-      dispatch({ type: 'SET_WALLET_UNLOCKED', payload: true });
-        toast.success('Wallet unlocked successfully');
-      return true;
+      const success = await walletManager.unlockWallet(password);
+      if (success) {
+        const currentWallet = await walletManager.getCurrentWallet();
+        const address = currentWallet?.address || '';
+        const currentNetwork = await networkManager.getCurrentNetwork();
+        
+        setState(prev => ({
+          ...prev,
+          isUnlocked: true,
+          isWalletUnlocked: true,
+          currentWallet,
+          wallet: currentWallet,
+          address,
+          currentNetwork,
+          isLoading: false
+        }));
       } else {
-        toast.error('Invalid password');
-        return false;
+        setState(prev => ({
+          ...prev,
+          error: 'Invalid password',
+          isLoading: false
+        }));
       }
     } catch (error) {
-      toast.error('Failed to unlock wallet');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to unlock wallet' });
-      return false;
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to unlock wallet',
+        isLoading: false
+      }));
     }
   };
 
   // Lock wallet
-  const lockWallet = (): void => {
-    dispatch({ type: 'LOCK_WALLET' });
-    toast.success('Wallet locked');
+  const lockWallet = () => {
+    setState(prev => ({
+      ...prev,
+      isUnlocked: false,
+      isWalletUnlocked: false,
+      currentWallet: null,
+      wallet: null,
+      address: ''
+    }));
   };
 
-  // Switch network
-  const switchNetwork = async (networkId: string): Promise<void> => {
+  // Create wallet
+  const createWallet = async (name: string, password: string): Promise<void> => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      toast(`Switching to network: ${networkId}`);
+      const seedPhrase = await generateHDWallet();
+      const encryptedSeed = await encryptData(seedPhrase, password);
       
-      // Find the network
-      const network = state.networks.find(n => n.id === networkId);
-      if (!network) {
-        throw new Error('Network not found');
-      }
+      const wallet: Wallet = {
+        id: Date.now().toString(),
+        name,
+        address: '', // Will be set after derivation
+        privateKey: '',
+        publicKey: '',
+        seedPhrase: encryptedSeed,
+        network: 'ethereum',
+        balance: '0',
+        isEncrypted: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
 
-      dispatch({ type: 'SET_CURRENT_NETWORK', payload: network });
+      await walletManager.createWallet(wallet);
       
-      // Update balances for new network
-      if (state.address) {
-        await updateAllBalances();
-      }
+      setState(prev => ({
+        ...prev,
+        wallets: [...prev.wallets, wallet],
+        currentWallet: wallet,
+        wallet,
+        hasWallet: true,
+        isWalletCreated: true,
+        isLoading: false
+      }));
     } catch (error) {
-      toast.error('Failed to switch network');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to switch network' });
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to create wallet',
+        isLoading: false
+      }));
     }
   };
 
-  // Get balance for specific address and network
-  const getBalance = async (address: string, network: string): Promise<string> => {
+  // Import wallet
+  const importWallet = async (seedPhrase: string, password: string): Promise<void> => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      const balance = await getRealBalance(address, network);
-      return balance;
-    } catch (error) {
-      toast.error('Failed to get balance');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to get balance' });
-      return '0';
-    }
-  };
-
-  // Update all balances
-  const updateAllBalances = async (): Promise<void> => {
-    if (!state.address) return;
-
-    try {
-      const newBalances: Record<string, string> = {};
+      const encryptedSeed = await encryptData(seedPhrase, password);
       
-      for (const network of state.networks) {
-        const balance = await getRealBalance(state.address!, network.id);
-        newBalances[`${state.address}_${network.id}`] = balance;
-      }
+      const wallet: Wallet = {
+        id: Date.now().toString(),
+        name: 'Imported Wallet',
+        address: '', // Will be set after derivation
+        privateKey: '',
+        publicKey: '',
+        seedPhrase: encryptedSeed,
+        network: 'ethereum',
+        balance: '0',
+        isEncrypted: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
 
-      dispatch({ type: 'SET_BALANCES', payload: newBalances });
+      await walletManager.importWallet(wallet);
+      
+      setState(prev => ({
+        ...prev,
+        wallets: [...prev.wallets, wallet],
+        currentWallet: wallet,
+        wallet,
+        hasWallet: true,
+        isWalletCreated: true,
+        isLoading: false
+      }));
     } catch (error) {
-      toast.error('Failed to update balances');
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to update balances' });
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to import wallet',
+        isLoading: false
+      }));
     }
   };
 
-  // Store wallet securely
-  const storeWallet = async (wallet: WalletData): Promise<void> => {
-    // In a real implementation, you would encrypt the wallet data
-    // For now, we'll store it as is (should be encrypted in production)
-    chrome.storage.local.set({ wallet });
+  // Switch wallet
+  const switchWallet = (walletId: string) => {
+    const wallet = state.wallets.find(w => w.id === walletId);
+    if (wallet) {
+      setState(prev => ({
+        ...prev,
+        currentWallet: wallet,
+        wallet,
+        address: wallet.address
+      }));
+    }
   };
 
-  // Get stored wallet
-  const getStoredWallet = async (): Promise<WalletData | null> => {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(['wallet'], (result) => {
-        resolve(result.wallet || null);
-      });
-    });
+  // Delete wallet
+  const deleteWallet = async (walletId: string): Promise<void> => {
+    try {
+      await walletManager.deleteWallet(walletId);
+      const updatedWallets = state.wallets.filter(w => w.id !== walletId);
+      const hasWallet = updatedWallets.length > 0;
+      
+      setState(prev => ({
+        ...prev,
+        wallets: updatedWallets,
+        currentWallet: hasWallet ? updatedWallets[0] : null,
+        wallet: hasWallet ? updatedWallets[0] : null,
+        hasWallet,
+        isWalletCreated: hasWallet
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to delete wallet'
+      }));
+    }
   };
 
-  // Store password hash
-  const storePasswordHash = async (hash: string): Promise<void> => {
-    chrome.storage.local.set({ passwordHash: hash });
+  // Update wallet
+  const updateWallet = async (walletId: string, updates: Partial<Wallet>): Promise<void> => {
+    try {
+      await walletManager.updateWallet(walletId, updates);
+      const updatedWallets = state.wallets.map(w => 
+        w.id === walletId ? { ...w, ...updates } : w
+      );
+      
+      setState(prev => ({
+        ...prev,
+        wallets: updatedWallets,
+        currentWallet: prev.currentWallet?.id === walletId 
+          ? { ...prev.currentWallet, ...updates }
+          : prev.currentWallet,
+        wallet: prev.wallet?.id === walletId 
+          ? { ...prev.wallet, ...updates }
+          : prev.wallet
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to update wallet'
+      }));
+    }
   };
 
-  // Get stored password hash
-  const getStoredPasswordHash = async (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(['passwordHash'], (result) => {
-        resolve(result.passwordHash || null);
-      });
-    });
+  // Add hardware wallet
+  const addHardwareWallet = async (deviceType: 'ledger' | 'trezor'): Promise<void> => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    try {
+      // Implementation would connect to hardware wallet
+      // For now, create a placeholder wallet
+      const wallet: Wallet = {
+        id: Date.now().toString(),
+        name: `${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} Wallet`,
+        address: '',
+        privateKey: '',
+        publicKey: '',
+        seedPhrase: '',
+        network: 'ethereum',
+        balance: '0',
+        isEncrypted: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      await walletManager.createWallet(wallet);
+      
+      setState(prev => ({
+        ...prev,
+        wallets: [...prev.wallets, wallet],
+        currentWallet: wallet,
+        wallet,
+        hasWallet: true,
+        isLoading: false
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to add hardware wallet',
+        isLoading: false
+      }));
+    }
   };
+
+  // Get networks
+  const getNetworks = async () => {
+    try {
+      const networks = await networkManager.getNetworks();
+      setState(prev => ({ ...prev, networks }));
+    } catch (error) {
+      console.error('Failed to get networks:', error);
+    }
+  };
+
+  // Get balance
+  const getBalance = async (address: string, network: string) => {
+    try {
+      const balance = await walletManager.getBalance(address, network);
+      setState(prev => ({
+        ...prev,
+        balances: { ...prev.balances, [`${address}-${network}`]: balance }
+      }));
+    } catch (error) {
+      console.error('Failed to get balance:', error);
+    }
+  };
+
+  // Get current network
+  const getCurrentNetwork = async () => {
+    try {
+      const currentNetwork = await networkManager.getCurrentNetwork();
+      setState(prev => ({ ...prev, currentNetwork }));
+    } catch (error) {
+      console.error('Failed to get current network:', error);
+    }
+  };
+
+  useEffect(() => {
+    initializeWallet();
+    getNetworks();
+  }, []);
 
   const value: WalletContextType = {
-    ...state,
+    wallets: state.wallets,
+    currentWallet: state.currentWallet,
+    isUnlocked: state.isUnlocked,
+    isLoading: state.isLoading,
+    error: state.error,
     createWallet,
     importWallet,
     unlockWallet,
     lockWallet,
-    switchNetwork,
-    getBalance,
-    updateAllBalances,
-    initializeWallet
+    switchWallet,
+    deleteWallet,
+    updateWallet,
+    addHardwareWallet
   };
 
   return (
@@ -353,7 +354,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 };
 
-// Hook to use wallet context
 export const useWallet = (): WalletContextType => {
   const context = useContext(WalletContext);
   if (context === undefined) {

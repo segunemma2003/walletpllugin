@@ -302,4 +302,53 @@ export class PortfolioManager {
       lastUpdated: this.portfolioValue.lastUpdated
     };
   }
+
+  // Get portfolio data (real implementation)
+  async getPortfolio(address: string, network: string): Promise<PortfolioData> {
+    try {
+      // Get token balances
+      const tokens = await this.getTokenBalances(address, network);
+      
+      // Get token prices
+      const tokenAddresses = tokens.map(token => token.contractAddress);
+      const prices = await getMultipleTokenPrices(tokenAddresses);
+      
+      // Calculate total value
+      let totalValueUSD = 0;
+      const assets: PortfolioAsset[] = [];
+      
+      for (const token of tokens) {
+        const price = prices[token.contractAddress.toLowerCase()] || 0;
+        const valueUSD = parseFloat(token.balance) * price;
+        totalValueUSD += valueUSD;
+        
+        assets.push({
+          symbol: token.symbol,
+          name: token.name,
+          balance: token.balance,
+          value: token.balance,
+          valueUSD: valueUSD.toString(),
+          change24h: 0, // Would need to fetch from API
+          network
+        });
+      }
+      
+      return {
+        totalValue: totalValueUSD.toString(),
+        totalValueUSD: totalValueUSD.toString(),
+        change24h: '0',
+        change24hPercent: 0,
+        assets
+      };
+    } catch (error) {
+      console.error('Error getting portfolio:', error);
+      return {
+        totalValue: '0',
+        totalValueUSD: '0',
+        change24h: '0',
+        change24hPercent: 0,
+        assets: []
+      };
+    }
+  }
 } 

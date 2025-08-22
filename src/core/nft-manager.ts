@@ -359,6 +359,36 @@ export class NFTManager {
     return this.nfts.find(nft => nft.id === id);
   }
 
+  // Get NFTs for address (real implementation)
+  async getNFTs(address: string, network: string): Promise<NFT[]> {
+    try {
+      const config = getNetworkConfig(network);
+      const alchemyUrl = config.alchemyUrl || `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
+      
+      const response = await fetch(`${alchemyUrl}/getNFTs/?owner=${address}`);
+      const data = await response.json();
+      
+      if (!data.ownedNfts) {
+        return [];
+      }
+      
+      return data.ownedNfts.map((nft: any) => ({
+        id: `${nft.contract.address}-${nft.id.tokenId}`,
+        name: nft.title || 'Unknown NFT',
+        description: nft.description || '',
+        imageUrl: nft.media?.[0]?.gateway || '',
+        tokenId: nft.id.tokenId,
+        contractAddress: nft.contract.address,
+        network,
+        owner: address,
+        metadata: nft.metadata
+      }));
+    } catch (error) {
+      console.error('Error fetching NFTs:', error);
+      return [];
+    }
+  }
+
   // Get NFT collections
   getCollections(): NFTCollection[] {
     return this.collections;
@@ -417,5 +447,10 @@ export class NFTManager {
       POLYGONSCAN_API_KEY: ''
     };
   }
-  }
 } 
+
+// Export the getNFTs method
+export const getNFTs = async (address: string, network: string): Promise<NFT[]> => {
+  const nftManager = new NFTManager();
+  return nftManager.getNFTs(address, network);
+}; 

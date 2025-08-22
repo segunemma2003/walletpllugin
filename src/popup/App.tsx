@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
-import { useWallet } from '../store/WalletContext';
-import { useNetwork } from '../store/NetworkContext';
-import { useTransaction } from '../store/TransactionContext';
-import { usePortfolio } from '../store/PortfolioContext';
-import type { ScreenId, NotificationType } from '../types/index';
-import toast from 'react-hot-toast';
-
-// Import screens
+import React, { useState } from 'react';
+import { WalletProvider, useWallet } from '../store/WalletContext';
+import { NetworkProvider } from '../store/NetworkContext';
+import { PortfolioProvider } from '../store/PortfolioContext';
+import { NFTProvider } from '../store/NFTContext';
+import { TransactionProvider } from '../store/TransactionContext';
+import { SecurityProvider } from '../store/SecurityContext';
+import { ScreenId, ScreenProps, NotificationType } from '../types';
 import WelcomeScreen from '../components/screens/WelcomeScreen';
 import CreateWalletScreen from '../components/screens/CreateWalletScreen';
 import ImportWalletScreen from '../components/screens/ImportWalletScreen';
@@ -22,172 +19,134 @@ import NetworksScreen from '../components/screens/NetworksScreen';
 import NFTScreen from '../components/screens/NFTScreen';
 import PortfolioScreen from '../components/screens/PortfolioScreen';
 import TransactionsScreen from '../components/screens/TransactionsScreen';
+import TransactionHistoryScreen from '../components/screens/TransactionHistoryScreen';
+import WalletConnectScreen from '../components/screens/WalletConnectScreen';
 import LoadingScreen from '../components/screens/LoadingScreen';
 import ErrorScreen from '../components/screens/ErrorScreen';
-
-// Import common components
 import Header from '../components/common/Header';
 import Navigation from '../components/common/Navigation';
 import NotificationBanner from '../components/common/NotificationBanner';
 
-const App: React.FC = () => {
+const PopupContent: React.FC = () => {
+  const { currentWallet, isUnlocked, error } = useWallet();
   const [currentScreen, setCurrentScreen] = useState<ScreenId>('welcome');
-  const [isLoading, setIsLoading] = useState(true);
   const [notification, setNotification] = useState<NotificationType | null>(null);
 
-  // Context hooks
-  const {
-    wallet,
-    isWalletUnlocked,
-    isLoading: walletLoading,
-    error: walletError,
-    initializeWallet
-  } = useWallet();
-
-  const { currentNetwork } = useNetwork();
-  const { pendingTransactions } = useTransaction();
-  const { portfolioValue } = usePortfolio();
-
-  // Initialize app
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        await initializeWallet();
-        setIsLoading(false);
-      } catch (err) {
-        toast.error('Failed to initialize app');
-        setIsLoading(false);
-      }
-    };
-
-    initializeApp();
-  }, [initializeWallet]);
-
-  // Handle navigation
   const handleNavigate = (screen: ScreenId) => {
     setCurrentScreen(screen);
   };
 
-  // Handle notification dismissal
   const handleDismissNotification = () => {
     setNotification(null);
   };
 
-  // Show loading screen
-  if (isLoading || walletLoading) {
-    return <LoadingScreen message="Initializing wallet..." />;
+  const screenProps: ScreenProps = {
+    onNavigate: handleNavigate,
+    currentScreen
+  };
+
+  // Show loading if wallet is initializing
+  if (!currentWallet && !isUnlocked) {
+    return <LoadingScreen {...screenProps} />;
   }
 
-  // Show error screen
-  if (walletError) {
-    return (
-      <ErrorScreen 
-        error={walletError || 'An unknown error occurred'} 
-        onRetry={() => window.location.reload()} 
-      />
-    );
+  // Show error if there's an error
+  if (error) {
+    return <ErrorScreen {...screenProps} />;
   }
 
-  // Render current screen
+  // Show welcome if no wallet exists
+  if (!currentWallet) {
+    return <WelcomeScreen {...screenProps} />;
+  }
+
+  // Show wallet creation/import screens if wallet exists but not unlocked
+  if (!isUnlocked) {
+    switch (currentScreen) {
+      case 'create':
+        return <CreateWalletScreen {...screenProps} />;
+      case 'import':
+        return <ImportWalletScreen {...screenProps} />;
+      case 'verify':
+        return <VerifySeedScreen {...screenProps} />;
+      default:
+        return <WelcomeScreen {...screenProps} />;
+    }
+  }
+
+  // Show main app screens if wallet is unlocked
   const renderScreen = () => {
     switch (currentScreen) {
-      case 'welcome':
-        return <WelcomeScreen onNavigate={handleNavigate} />;
-      case 'create':
-        return <CreateWalletScreen onNavigate={handleNavigate} />;
-      case 'import':
-        return <ImportWalletScreen onNavigate={handleNavigate} />;
-      case 'verify':
-        return <VerifySeedScreen onNavigate={handleNavigate} />;
       case 'dashboard':
-        return (
-          <DashboardScreen 
-            onNavigate={handleNavigate}
-            wallet={wallet}
-            currentNetwork={currentNetwork}
-            portfolioValue={portfolioValue}
-            pendingTransactions={pendingTransactions}
-          />
-        );
+        return <DashboardScreen {...screenProps} />;
       case 'send':
-        return <SendScreen onNavigate={handleNavigate} />;
+        return <SendScreen {...screenProps} />;
       case 'receive':
-        return <ReceiveScreen onNavigate={handleNavigate} />;
+        return <ReceiveScreen {...screenProps} />;
       case 'settings':
-        return <SettingsScreen onNavigate={handleNavigate} />;
+        return <SettingsScreen {...screenProps} />;
       case 'security':
-        return <SecurityScreen onNavigate={handleNavigate} />;
+        return <SecurityScreen {...screenProps} />;
       case 'networks':
-        return <NetworksScreen onNavigate={handleNavigate} />;
+        return <NetworksScreen {...screenProps} />;
       case 'nfts':
-        return <NFTScreen onNavigate={handleNavigate} />;
+        return <NFTScreen {...screenProps} />;
       case 'portfolio':
-        return <PortfolioScreen onNavigate={handleNavigate} />;
+        return <PortfolioScreen {...screenProps} />;
       case 'transactions':
-        return <TransactionsScreen onNavigate={handleNavigate} />;
+        return <TransactionsScreen {...screenProps} />;
+      case 'walletconnect':
+        return <WalletConnectScreen {...screenProps} />;
       case 'loading':
-        return <LoadingScreen />;
+        return <LoadingScreen {...screenProps} />;
       case 'error':
-        return <ErrorScreen error="Something went wrong" onRetry={() => window.location.reload()} />;
+        return <ErrorScreen {...screenProps} />;
       default:
-        return <WelcomeScreen onNavigate={handleNavigate} />;
+        return <DashboardScreen {...screenProps} />;
     }
   };
 
   return (
-    <div className="h-full bg-gray-50 flex flex-col">
-      {/* Header */}
+    <div className="w-96 h-96 bg-gray-900 text-white flex flex-col">
       <Header 
-        title={currentScreen === 'dashboard' ? 'SOW Wallet' : currentScreen.charAt(0).toUpperCase() + currentScreen.slice(1)}
-        wallet={wallet}
-        currentNetwork={currentNetwork}
+        title="PayCio Wallet" 
+        onBack={() => handleNavigate('dashboard')}
+        showBack={currentScreen !== 'dashboard'}
       />
-
-      {/* Main content */}
-      <div className="flex-1 overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentScreen}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="h-full"
-          >
-            {renderScreen()}
-          </motion.div>
-        </AnimatePresence>
+      
+      <div className="flex-1 overflow-y-auto">
+        {renderScreen()}
       </div>
-
-      {/* Navigation */}
-      {isWalletUnlocked && currentScreen !== 'welcome' && currentScreen !== 'create' && currentScreen !== 'import' && currentScreen !== 'verify' && (
-        <Navigation 
-          currentScreen={currentScreen}
-          onNavigate={handleNavigate}
-          wallet={wallet}
-          pendingTransactions={pendingTransactions}
-        />
-      )}
-
-      {/* Notification banner */}
-      <NotificationBanner 
-        notification={notification}
-        onDismiss={handleDismissNotification}
+      
+      <Navigation 
+        currentScreen={currentScreen} 
+        onNavigate={handleNavigate} 
       />
-
-      {/* Toast notifications */}
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-        }}
+      
+      <NotificationBanner 
+        notification={notification} 
+        onDismiss={handleDismissNotification} 
       />
     </div>
   );
 };
 
-export default App; 
+const PopupApp: React.FC = () => {
+  return (
+    <WalletProvider>
+      <NetworkProvider>
+        <PortfolioProvider>
+          <NFTProvider>
+            <TransactionProvider>
+              <SecurityProvider>
+                <PopupContent />
+              </SecurityProvider>
+            </TransactionProvider>
+          </NFTProvider>
+        </PortfolioProvider>
+      </NetworkProvider>
+    </WalletProvider>
+  );
+};
+
+export default PopupApp; 

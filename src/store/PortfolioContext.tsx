@@ -1,6 +1,30 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ethers } from 'ethers';
+import { getMultipleTokenPrices, get24hPriceChange } from '../utils/web3-utils';
+import { PortfolioData, PortfolioAsset } from '../types';
 import toast from 'react-hot-toast';
-import { getRealBalance, getTokenPrice, getMultipleTokenPrices } from '../utils/web3-utils';
+
+// Import networks configuration
+const NETWORKS = [
+  {
+    id: 'ethereum',
+    name: 'Ethereum',
+    symbol: 'ETH',
+    chainId: '1'
+  },
+  {
+    id: 'polygon',
+    name: 'Polygon',
+    symbol: 'MATIC',
+    chainId: '137'
+  },
+  {
+    id: 'bsc',
+    name: 'BNB Smart Chain',
+    symbol: 'BNB',
+    chainId: '56'
+  }
+];
 
 interface PortfolioValue {
   totalUSD: number;
@@ -119,7 +143,7 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
       // Fetch balances for all networks
       for (const network of networks) {
         try {
-          const balance = await getRealBalance(address, network);
+          const balance = await ethers.provider.getBalance(address);
           const balanceInEth = parseFloat(ethers.formatEther(balance));
           
           if (balanceInEth > 0) {

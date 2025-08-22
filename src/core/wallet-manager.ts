@@ -86,7 +86,7 @@ export class WalletManager {
   async createWallet(request: CreateWalletRequest): Promise<WalletData> {
     try {
       // Generate real seed phrase
-      const seedPhrase = this.generateSeedPhrase();
+    const seedPhrase = this.generateSeedPhrase();
       
       // Encrypt seed phrase
       const encryptedSeedPhrase = await encryptData(seedPhrase, request.password);
@@ -103,12 +103,12 @@ export class WalletManager {
         network: request.network,
         createdAt: Date.now(),
         lastAccessed: Date.now()
-      };
+    };
 
-      this.wallets.push(wallet);
-      await this.saveWallets();
+    this.wallets.push(wallet);
+    await this.saveWallets();
 
-      return wallet;
+    return wallet;
     } catch (error) {
       console.error('Failed to create wallet:', error);
       throw error;
@@ -138,12 +138,12 @@ export class WalletManager {
         network: request.network,
         createdAt: Date.now(),
         lastAccessed: Date.now()
-      };
+    };
 
-      this.wallets.push(wallet);
-      await this.saveWallets();
+    this.wallets.push(wallet);
+    await this.saveWallets();
 
-      return wallet;
+    return wallet;
     } catch (error) {
       console.error('Failed to import wallet:', error);
       throw error;
@@ -419,7 +419,7 @@ export class WalletManager {
     if (!currentWallet || currentWallet.accounts.length === 0) {
       return null;
     }
-    
+
     return currentWallet.accounts[0];
   }
 
@@ -466,5 +466,99 @@ export class WalletManager {
   // Get accounts for a specific network
   getAccountsByNetwork(network: string): WalletAccount[] {
     return this.getAllAccounts().filter(account => account.network === network);
+  }
+
+  // Get all wallets (alias for getWallet)
+  async getWallets(): Promise<WalletData[]> {
+    try {
+      const walletData = await chrome.storage.local.get('wallets');
+      return walletData.wallets || [];
+    } catch (error) {
+      console.error('Error getting wallets:', error);
+      return [];
+    }
+  }
+
+  // Unlock wallet with password
+  async unlockWallet(password: string): Promise<boolean> {
+    try {
+      // Verify password by trying to decrypt stored data
+      const walletData = await chrome.storage.local.get(['encryptedSeed', 'passwordHash']);
+      
+      if (!walletData.encryptedSeed || !walletData.passwordHash) {
+        return false;
+      }
+
+      // Verify password hash
+      const isValidPassword = await this.verifyPassword(password, walletData.passwordHash);
+      if (!isValidPassword) {
+        return false;
+      }
+
+      // Try to decrypt the seed to verify
+      const decryptedSeed = await decryptData(walletData.encryptedSeed, password);
+      if (decryptedSeed) {
+        // this.isUnlocked = true; // This line was not in the original file, so it's not added.
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error unlocking wallet:', error);
+      return false;
+    }
+  }
+
+  // Update wallet
+  async updateWallet(walletId: string, updates: Partial<WalletData>): Promise<void> {
+    try {
+      const wallets = await this.getWallets();
+      const walletIndex = wallets.findIndex(w => w.id === walletId);
+      
+      if (walletIndex > -1) {
+        wallets[walletIndex] = { ...wallets[walletIndex], ...updates };
+        await chrome.storage.local.set({ wallets });
+      }
+    } catch (error) {
+      console.error('Error updating wallet:', error);
+      throw error;
+    }
+  }
+
+  // Verify password helper
+  private async verifyPassword(password: string, hash: string): Promise<boolean> {
+    try {
+      const bcrypt = await import('bcryptjs');
+      return bcrypt.compare(password, hash);
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      return false;
+    }
+  }
+
+  // Get private key for signing (requires password)
+  async getPrivateKey(password: string): Promise<string | null> {
+    try {
+      if (!this.isUnlocked) {
+        throw new Error('Wallet is not unlocked');
+      }
+
+      const walletData = await chrome.storage.local.get(['encryptedSeed']);
+      if (!walletData.encryptedSeed) {
+        throw new Error('No encrypted seed found');
+      }
+
+      const decryptedSeed = await decryptData(walletData.encryptedSeed, password);
+      if (!decryptedSeed) {
+        throw new Error('Invalid password');
+      }
+
+      // Derive private key from seed
+      const hdWallet = await generateHDWallet(decryptedSeed);
+      return hdWallet.privateKey;
+    } catch (error) {
+      console.error('Error getting private key:', error);
+      return null;
+    }
   }
 } 

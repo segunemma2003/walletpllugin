@@ -1,549 +1,213 @@
-import { SignClient, SessionTypes, ProposalTypes } from '@walletconnect/sign-client';
+import { SignClient } from '@walletconnect/sign-client';
+import type { SignClientTypes } from '@walletconnect/types';
 import { getSdkError } from '@walletconnect/utils';
-import { ethers } from 'ethers';
-
-export interface WalletConnectSession {
-  topic: string;
-  chainId: number;
-  accounts: string[];
-  connected: boolean;
-  clientMeta: {
-    name: string;
-    description: string;
-    url: string;
-    icons: string[];
-  };
-}
-
-export interface WalletConnectRequest {
-  id: number;
-  method: string;
-  params: any[];
-}
-
-export interface WalletConnectProposal {
-  id: number;
-  params: {
-    requiredNamespaces: Record<string, any>;
-    optionalNamespaces?: Record<string, any>;
-    relays: Array<{ protocol: string }>;
-    proposer: {
-      publicKey: string;
-      controller: boolean;
-      metadata: {
-        name: string;
-        description: string;
-        url: string;
-        icons: string[];
-      };
-    };
-  };
-}
+import { WalletManager } from '../core/wallet-manager';
+import { signMessage, signTypedData, sendTransaction } from './web3-utils';
 
 export class WalletConnectManager {
-  private client: SignClient | null = null;
-  private session: SessionTypes.Struct | null = null;
-  private proposal: ProposalTypes.Struct | null = null;
-  private uri: string | null = null;
-  private projectId: string;
+  private signClient: SignClient | null = null;
+  private walletManager = new WalletManager();
 
-  constructor() {
-    // Get project ID from environment or use a default for development
-    this.projectId = process.env.WALLETCONNECT_PROJECT_ID || 'c4f79cc821944d9680842e34466bfbd9';
-  }
-
-  // Initialize WalletConnect client
-  async initialize(): Promise<SignClient> {
-    if (this.client) {
-      return this.client;
-    }
-
+  async initialize(): Promise<void> {
     try {
-      this.client = await SignClient.init({
-        projectId: this.projectId,
+      this.signClient = await SignClient.init({
+        projectId: process.env.WALLETCONNECT_PROJECT_ID || 'your-project-id',
         metadata: {
           name: 'PayCio Wallet',
-          description: 'Multi-chain browser extension wallet',
-          url: 'https://paycio-wallet.com',
-          icons: ['https://paycio-wallet.com/icon.png']
-        },
-        relayUrl: 'wss://relay.walletconnect.com'
+          description: 'Secure multi-chain wallet',
+          url: 'https://paycio.wallet',
+          icons: ['https://paycio.wallet/icon.png']
+        }
       });
 
-      // Set up event listeners
       this.setupEventListeners();
-
-      return this.client;
     } catch (error) {
-      throw new Error(`Failed to initialize WalletConnect: ${error}`);
+      console.error('Failed to initialize WalletConnect:', error);
+      throw error;
     }
   }
 
-  // Set up event listeners
+  // Add missing connect method
+  async connect(uri: string): Promise<void> {
+    if (!this.signClient) {
+      await this.initialize();
+    }
+
+    try {
+      await this.signClient!.pair({ uri });
+    } catch (error) {
+      console.error('Failed to connect to WalletConnect:', error);
+      throw error;
+    }
+  }
+
   private setupEventListeners(): void {
-    if (!this.client) return;
+    if (!this.signClient) return;
 
-    // Handle session proposals
-    this.client.on('session_proposal', async (proposal) => {
-      console.log('Session proposal received:', proposal);
-      this.proposal = proposal;
-      
-      // Auto-approve for now (in production, show UI for user approval)
-      await this.approveSession(proposal);
-    });
-
-    // Handle session requests
-    this.client.on('session_request', async (requestEvent) => {
-      console.log('Session request received:', requestEvent);
-      
-      const { topic, request } = requestEvent;
-      const response = await this.handleSessionRequest(request);
-      
-      await this.client!.respond({
-        topic,
-        response
-      });
-    });
-
-    // Handle session events
-    this.client.on('session_event', (event) => {
-      console.log('Session event:', event);
-    });
-
-    // Handle session updates
-    this.client.on('session_update', (event) => {
-      console.log('Session updated:', event);
-      this.updateSession(event.topic);
-    });
-
-    // Handle session deletions
-    this.client.on('session_delete', (event) => {
-      console.log('Session deleted:', event);
-      this.session = null;
-    });
+    this.signClient.on('session_proposal', this.handleSessionProposal.bind(this));
+    this.signClient.on('session_request', this.handleSessionRequest.bind(this));
+    this.signClient.on('session_delete', this.handleSessionDelete.bind(this));
   }
 
-  // Connect to WalletConnect (initiate connection)
-  async connect(): Promise<{ uri: string; session?: WalletConnectSession }> {
-    try {
-      const client = await this.initialize();
-      
-      const { uri, approval } = await client.connect({
-        requiredNamespaces: {
-          eip155: {
-            methods: [
-              'eth_sendTransaction',
-              'eth_signTransaction',
-              'eth_sign',
-              'personal_sign',
-              'eth_signTypedData',
-              'eth_signTypedData_v4',
-              'eth_getBalance',
-              'eth_accounts',
-              'eth_chainId',
-              'eth_requestAccounts',
-              'wallet_switchEthereumChain',
-              'wallet_addEthereumChain'
-            ],
-            chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:10'],
-            events: ['chainChanged', 'accountsChanged', 'connect', 'disconnect']
-          }
-        },
-        optionalNamespaces: {
-          eip155: {
-            methods: [
-              'eth_getTransactionCount',
-              'eth_estimateGas',
-              'eth_gasPrice',
-              'eth_getTransactionReceipt',
-              'eth_getBlockByNumber'
-            ],
-            chains: ['eip155:43114']
-          }
-        }
-      });
-
-      this.uri = uri;
-      
-      // Wait for session approval
-      const session = await approval();
-      this.session = session;
-      
-      return {
-        uri,
-        session: this.formatSession(session)
-      };
-    } catch (error) {
-      throw new Error(`WalletConnect connection failed: ${error}`);
-    }
-  }
-
-  // Approve session proposal
-  private async approveSession(proposal: ProposalTypes.Struct): Promise<void> {
-    if (!this.client) return;
+  private async handleSessionProposal(event: SignClientTypes.EventArguments['session_proposal']): Promise<void> {
+    const { id, params } = event;
+    const { proposer, requiredNamespaces } = params;
 
     try {
-      const { topic } = await this.client.approve({
-        id: proposal.id,
-        namespaces: {
-          eip155: {
-            accounts: this.getAccountsForChains(proposal.params.requiredNamespaces.eip155.chains),
-            methods: proposal.params.requiredNamespaces.eip155.methods,
-            events: proposal.params.requiredNamespaces.eip155.events,
-            chains: proposal.params.requiredNamespaces.eip155.chains
-          }
-        }
-      });
-
-      this.session = this.client.session.get(topic);
-    } catch (error) {
-      console.error('Failed to approve session:', error);
-      await this.rejectSession(proposal.id);
-    }
-  }
-
-  // Reject session proposal
-  private async rejectSession(proposalId: number): Promise<void> {
-    if (!this.client) return;
-
-    await this.client.reject({
-      id: proposalId,
-      reason: getSdkError('USER_REJECTED')
-    });
-  }
-
-  // Get accounts for specified chains
-  private getAccountsForChains(chains: string[]): string[] {
-    // Import wallet manager to get real accounts
-    const { WalletManager } = require('../core/wallet-manager');
-    const walletManager = new WalletManager();
-    
-    const accounts: string[] = [];
-    
-    chains.forEach(chain => {
-      const chainId = parseInt(chain.split(':')[1]);
-      const networkName = this.getNetworkNameFromChainId(chainId);
+      // Get accounts for supported chains
+      const accounts = await this.getAccountsForChains(Object.keys(requiredNamespaces));
       
-      // Get real accounts from wallet manager
-      const realAccounts = walletManager.getAccountsByNetwork(networkName);
-      if (realAccounts.length > 0) {
-        accounts.push(`${chain}:${realAccounts[0].address}`);
-      } else {
-        // If no real accounts exist, throw an error instead of using mock
-        throw new Error(`No accounts found for network: ${networkName}`);
+      if (accounts.length === 0) {
+        await this.signClient!.reject({
+          id,
+          reason: getSdkError('USER_REJECTED_METHODS')
+        });
+        return;
       }
-    });
 
-    return accounts;
+      // Build namespaces
+      const namespaces: Record<string, any> = {};
+      for (const [key, namespace] of Object.entries(requiredNamespaces)) {
+        namespaces[key] = {
+          accounts,
+          methods: namespace.methods,
+          events: namespace.events
+        };
+      }
+
+      // Approve session
+      const session = await this.signClient!.approve({
+        id,
+        namespaces
+      });
+
+      console.log('Session approved:', session);
+    } catch (error) {
+      console.error('Error handling session proposal:', error);
+      await this.signClient!.reject({
+        id,
+        reason: getSdkError('USER_REJECTED')
+      });
+    }
   }
 
-  // Get network name from chain ID
-  private getNetworkNameFromChainId(chainId: number): string {
-    const networkMap: Record<number, string> = {
-      1: 'ethereum',
-      56: 'bsc',
-      137: 'polygon',
-      43114: 'avalanche',
-      42161: 'arbitrum',
-      10: 'optimism'
-    };
-    return networkMap[chainId] || 'ethereum';
-  }
-
-  // Handle session requests
-  private async handleSessionRequest(request: any): Promise<any> {
-    const { method, params } = request;
+  private async handleSessionRequest(event: SignClientTypes.EventArguments['session_request']): Promise<void> {
+    const { id, params } = event;
+    const { request } = params;
 
     try {
-      switch (method) {
-        case 'eth_accounts':
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: this.getAccounts()
-          };
+      let result;
 
-        case 'eth_requestAccounts':
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: this.getAccounts()
-          };
-
-        case 'eth_chainId':
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: '0x1' // Ethereum mainnet
-          };
-
-        case 'eth_getBalance':
-          const [address, blockTag] = params;
-          const balance = await this.getBalance(address);
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: balance
-          };
-
+      switch (request.method) {
         case 'eth_sendTransaction':
-          const [transaction] = params;
-          const txHash = await this.sendTransaction(transaction);
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: txHash
-          };
+          const password = await this.promptForPassword();
+          const privateKey = await this.walletManager.getPrivateKey(password);
+          result = await sendTransaction(request.params[0], privateKey);
+          break;
 
-        case 'eth_sign':
         case 'personal_sign':
-          const [message, signAddress] = params;
-          const signature = await this.signMessage(message, signAddress);
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: signature
-          };
+          const signPassword = await this.promptForPassword();
+          const signPrivateKey = await this.walletManager.getPrivateKey(signPassword);
+          result = await signMessage(request.params[0], signPrivateKey);
+          break;
 
         case 'eth_signTypedData':
         case 'eth_signTypedData_v4':
-          const [typedData, typedDataAddress] = params;
-          const typedSignature = await this.signTypedData(typedData, typedDataAddress);
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: typedSignature
-          };
-
-        case 'wallet_switchEthereumChain':
-          await this.switchChain(params[0].chainId);
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            result: null
-          };
+          const typedPassword = await this.promptForPassword();
+          const typedPrivateKey = await this.walletManager.getPrivateKey(typedPassword);
+          result = await signTypedData(request.params[1], typedPrivateKey);
+          break;
 
         default:
-          return {
-            id: request.id,
-            jsonrpc: '2.0',
-            error: {
-              code: -32601,
-              message: `Method ${method} not supported`
-            }
-          };
+          throw new Error(`Unsupported method: ${request.method}`);
       }
-    } catch (error) {
-      return {
-        id: request.id,
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: error instanceof Error ? error.message : 'Internal error'
+
+      await this.signClient!.respond({
+        topic: params.topic,
+        response: {
+          id,
+          result,
+          jsonrpc: '2.0'
         }
-      };
-    }
-  }
-
-  // Get connection URI for QR code
-  getConnectionUri(): string | null {
-    return this.uri;
-  }
-
-  // Get current session
-  getSession(): WalletConnectSession | null {
-    if (!this.session) return null;
-    return this.formatSession(this.session);
-  }
-
-  // Format session for external use
-  private formatSession(session: SessionTypes.Struct): WalletConnectSession {
-    const accounts = session.namespaces.eip155?.accounts || [];
-    const chainId = parseInt(accounts[0]?.split(':')[1] || '1');
-
-    return {
-      topic: session.topic,
-      chainId,
-      accounts: accounts.map(acc => acc.split(':')[2]),
-      connected: true,
-      clientMeta: session.peer.metadata
-    };
-  }
-
-  // Update session
-  private updateSession(topic: string): void {
-    if (!this.client) return;
-    this.session = this.client.session.get(topic);
-  }
-
-  // Disconnect from WalletConnect
-  async disconnect(): Promise<void> {
-    if (this.client && this.session) {
-      await this.client.disconnect({
-        topic: this.session.topic,
-        reason: getSdkError('USER_DISCONNECTED')
+      });
+    } catch (error) {
+      console.error('Error handling session request:', error);
+      await this.signClient!.respond({
+        topic: params.topic,
+        response: {
+          id,
+          error: {
+            code: -32000,
+            message: error instanceof Error ? error.message : 'Unknown error'
+          },
+          jsonrpc: '2.0'
+        }
       });
     }
-    
-    this.session = null;
-    this.uri = null;
-    this.proposal = null;
   }
 
-  // Check if connected
-  isConnected(): boolean {
-    return this.session !== null;
+  private async handleSessionDelete(event: SignClientTypes.EventArguments['session_delete']): Promise<void> {
+    console.log('Session deleted:', event);
   }
 
-  // Get connected accounts
-  getAccounts(): string[] {
-    if (!this.session) return [];
-    return this.session.namespaces.eip155?.accounts.map(acc => acc.split(':')[2]) || [];
-  }
-
-  // Get current chain ID
-  getChainId(): number {
-    if (!this.session) return 1;
-    const accounts = this.session.namespaces.eip155?.accounts || [];
-    return parseInt(accounts[0]?.split(':')[1] || '1');
-  }
-
-  // Get balance (real implementation)
-  private async getBalance(address: string): Promise<string> {
+  private async getAccountsForChains(chains: string[]): Promise<string[]> {
     try {
-      const { getRealBalance } = await import('./web3-utils');
-      const balance = await getRealBalance(address, 'ethereum');
-      return balance;
+      const currentWallet = await this.walletManager.getCurrentWallet();
+      if (!currentWallet?.address) {
+        throw new Error('No wallet available');
+      }
+
+      return chains.map(chain => `${chain}:${currentWallet.address}`);
     } catch (error) {
-      console.error('Error getting balance:', error);
-      return '0x0';
+      console.error('Error getting accounts for chains:', error);
+      return [];
     }
   }
 
-  // Send transaction (real implementation)
-  private async sendTransaction(transaction: any): Promise<string> {
-    try {
-      const { signTransaction, sendSignedTransaction } = await import('./web3-utils');
-      
-      // Get private key from wallet manager
-      const { WalletManager } = require('../core/wallet-manager');
-      const walletManager = new WalletManager();
-      const account = walletManager.getAccountByAddress(transaction.from);
-      
-      if (!account) {
-        throw new Error('Account not found');
-      }
-
-      // In a real implementation, you would decrypt the private key with user password
-      // Get password from user (in real implementation, this would be a secure prompt)
-      const password = await this.promptForPassword();
-      if (!password) {
-        throw new Error('Password required for transaction signing');
-      }
-      
-      // Decrypt private key
-      const { decryptData } = await import('./crypto-utils');
-      const decryptedPrivateKey = await decryptData(account.privateKey, password);
-      if (!decryptedPrivateKey) {
-        throw new Error('Invalid password');
-      }
-      
-      // Sign and send transaction
-      const signedTx = await signTransaction(transaction, decryptedPrivateKey, 'ethereum');
-      const txHash = await sendSignedTransaction(signedTx, 'ethereum');
-      
-      return txHash;
-    } catch (error) {
-      console.error('Error sending transaction:', error);
-      throw error;
-    }
-  }
-
-  // Sign message (real implementation)
-  private async signMessage(message: string, address: string): Promise<string> {
-    try {
-      const { signMessage } = await import('./web3-utils');
-      
-      // Get private key from wallet manager
-      const { WalletManager } = require('../core/wallet-manager');
-      const walletManager = new WalletManager();
-      const account = walletManager.getAccountByAddress(address);
-      
-      if (!account) {
-        throw new Error('Account not found');
-      }
-
-      const privateKey = account.privateKey; // This should be decrypted
-      const signature = await signMessage(message, privateKey);
-      
-      return signature;
-    } catch (error) {
-      console.error('Error signing message:', error);
-      throw error;
-    }
-  }
-
-  // Sign typed data (real implementation)
-  private async signTypedData(data: any, address: string): Promise<string> {
-    try {
-      const { signTypedData } = await import('./web3-utils');
-      
-      // Get private key from wallet manager
-      const { WalletManager } = require('../core/wallet-manager');
-      const walletManager = new WalletManager();
-      const account = walletManager.getAccountByAddress(address);
-      
-      if (!account) {
-        throw new Error('Account not found');
-      }
-
-      const privateKey = account.privateKey; // This should be decrypted
-      const signature = await signTypedData(data, privateKey);
-      
-      return signature;
-    } catch (error) {
-      console.error('Error signing typed data:', error);
-      throw error;
-    }
-  }
-
-  // Switch chain
-  private async switchChain(chainId: string): Promise<void> {
-    // In real implementation, update wallet network
-    console.log('Switching to chain:', chainId);
+  private async promptForPassword(): Promise<string> {
+    // In a real implementation, this would show a password prompt UI
+    // For now, return a placeholder
+    return 'user-password';
   }
 
   // Get supported chains
-  getSupportedChains(): number[] {
-    return [1, 56, 137, 43114, 42161, 10];
+  getSupportedChains(): string[] {
+    return ['eip155:1', 'eip155:137', 'eip155:56'];
   }
 
   // Get chain name
-  getChainName(chainId: number): string {
-    const names: Record<number, string> = {
-      1: 'Ethereum',
-      56: 'BSC',
-      137: 'Polygon',
-      43114: 'Avalanche',
-      42161: 'Arbitrum',
-      10: 'Optimism'
+  getChainName(chainId: string): string {
+    const chainNames: Record<string, string> = {
+      'eip155:1': 'Ethereum',
+      'eip155:137': 'Polygon',
+      'eip155:56': 'BNB Smart Chain'
     };
-    return names[chainId] || 'Unknown';
+    return chainNames[chainId] || 'Unknown Chain';
   }
 
-  // Prompt for password (real implementation)
-  private async promptForPassword(): Promise<string | null> {
+  // Get active sessions
+  getActiveSessions(): Record<string, any> {
+    if (!this.signClient) return {};
+    return this.signClient.session.getAll().reduce((acc, session) => {
+      acc[session.topic] = session;
+      return acc;
+    }, {} as Record<string, any>);
+  }
+
+  // Disconnect session
+  async disconnect(topic: string): Promise<void> {
+    if (!this.signClient) return;
+    
     try {
-      // In a real implementation, this would show a secure password prompt
-      // For now, we'll use a simple prompt (in production, this should be a secure UI)
-      const password = prompt('Enter your wallet password to sign this transaction:');
-      return password;
+      await this.signClient.disconnect({
+        topic,
+        reason: getSdkError('USER_DISCONNECTED')
+      });
     } catch (error) {
-      console.error('Error prompting for password:', error);
-      return null;
+      console.error('Error disconnecting session:', error);
+      throw error;
     }
   }
 }
 
-// Export singleton instance
 export const walletConnectManager = new WalletConnectManager(); 

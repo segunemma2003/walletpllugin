@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
-import { useWallet } from './store/WalletContext';
-import { useNetwork } from './store/NetworkContext';
-import { useTransaction } from './store/TransactionContext';
-import { usePortfolio } from './store/PortfolioContext';
-import toast from 'react-hot-toast';
-
-// Import screens
+import React, { useState } from 'react';
+import { WalletProvider, useWallet } from './store/WalletContext';
+import { NetworkProvider } from './store/NetworkContext';
+import { PortfolioProvider } from './store/PortfolioContext';
+import { NFTProvider } from './store/NFTContext';
+import { TransactionProvider } from './store/TransactionContext';
+import { SecurityProvider } from './store/SecurityContext';
+import { ScreenId, ScreenProps } from './types';
 import WelcomeScreen from './components/screens/WelcomeScreen';
 import CreateWalletScreen from './components/screens/CreateWalletScreen';
 import ImportWalletScreen from './components/screens/ImportWalletScreen';
@@ -21,114 +19,99 @@ import NetworksScreen from './components/screens/NetworksScreen';
 import NFTScreen from './components/screens/NFTScreen';
 import PortfolioScreen from './components/screens/PortfolioScreen';
 import TransactionsScreen from './components/screens/TransactionsScreen';
+import TransactionHistoryScreen from './components/screens/TransactionHistoryScreen';
+import WalletConnectScreen from './components/screens/WalletConnectScreen';
+import LoadingScreen from './components/screens/LoadingScreen';
+import ErrorScreen from './components/screens/ErrorScreen';
 
-import type { ScreenId } from './types/index';
-
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { currentWallet, isUnlocked, error } = useWallet();
   const [currentScreen, setCurrentScreen] = useState<ScreenId>('welcome');
-  const [isLoading, setIsLoading] = useState(true);
-
-  const { wallet, initializeWallet } = useWallet();
-  const { networkState } = useNetwork();
-  const { portfolioValue } = usePortfolio();
-  const { pendingTransactions } = useTransaction();
-
-  // Initialize app
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        await initializeWallet();
-        setIsLoading(false);
-      } catch (error) {
-        toast.error('Failed to initialize app');
-        setIsLoading(false);
-      }
-    };
-
-    initializeApp();
-  }, [initializeWallet]);
 
   const handleNavigate = (screen: ScreenId) => {
     setCurrentScreen(screen);
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-full bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'welcome':
-        return <WelcomeScreen onNavigate={handleNavigate} />;
-      case 'create':
-        return <CreateWalletScreen onNavigate={handleNavigate} />;
-      case 'import':
-        return <ImportWalletScreen onNavigate={handleNavigate} />;
-      case 'verify':
-        return <VerifySeedScreen onNavigate={handleNavigate} />;
-      case 'dashboard':
-        return (
-          <DashboardScreen 
-            onNavigate={handleNavigate}
-            wallet={wallet}
-            currentNetwork={networkState.currentNetwork}
-            portfolioValue={portfolioValue}
-            pendingTransactions={pendingTransactions}
-          />
-        );
-      case 'send':
-        return <SendScreen onNavigate={handleNavigate} />;
-      case 'receive':
-        return <ReceiveScreen onNavigate={handleNavigate} />;
-      case 'settings':
-        return <SettingsScreen onNavigate={handleNavigate} />;
-      case 'security':
-        return <SecurityScreen onNavigate={handleNavigate} />;
-      case 'networks':
-        return <NetworksScreen onNavigate={handleNavigate} />;
-      case 'nfts':
-        return <NFTScreen onNavigate={handleNavigate} />;
-      case 'portfolio':
-        return <PortfolioScreen onNavigate={handleNavigate} />;
-      case 'transactions':
-        return <TransactionsScreen onNavigate={handleNavigate} />;
-      default:
-        return <WelcomeScreen onNavigate={handleNavigate} />;
-    }
+  const screenProps: ScreenProps = {
+    onNavigate: handleNavigate,
+    currentScreen
   };
 
+  // Show loading if wallet is initializing
+  if (!currentWallet && !isUnlocked) {
+    return <LoadingScreen {...screenProps} />;
+  }
+
+  // Show error if there's an error
+  if (error) {
+    return <ErrorScreen {...screenProps} />;
+  }
+
+  // Show welcome if no wallet exists
+  if (!currentWallet) {
+    return <WelcomeScreen {...screenProps} />;
+  }
+
+  // Show wallet creation/import screens if wallet exists but not unlocked
+  if (!isUnlocked) {
+    switch (currentScreen) {
+      case 'create':
+        return <CreateWalletScreen {...screenProps} />;
+      case 'import':
+        return <ImportWalletScreen {...screenProps} />;
+      case 'verify':
+        return <VerifySeedScreen {...screenProps} />;
+      default:
+        return <WelcomeScreen {...screenProps} />;
+    }
+  }
+
+  // Show main app screens if wallet is unlocked
+  switch (currentScreen) {
+    case 'dashboard':
+      return <DashboardScreen {...screenProps} />;
+    case 'send':
+      return <SendScreen {...screenProps} />;
+    case 'receive':
+      return <ReceiveScreen {...screenProps} />;
+    case 'settings':
+      return <SettingsScreen {...screenProps} />;
+    case 'security':
+      return <SecurityScreen {...screenProps} />;
+    case 'networks':
+      return <NetworksScreen {...screenProps} />;
+    case 'nfts':
+      return <NFTScreen {...screenProps} />;
+    case 'portfolio':
+      return <PortfolioScreen {...screenProps} />;
+    case 'transactions':
+      return <TransactionsScreen {...screenProps} />;
+    case 'walletconnect':
+      return <WalletConnectScreen {...screenProps} />;
+    case 'loading':
+      return <LoadingScreen {...screenProps} />;
+    case 'error':
+      return <ErrorScreen {...screenProps} />;
+    default:
+      return <DashboardScreen {...screenProps} />;
+  }
+};
+
+const App: React.FC = () => {
   return (
-    <div className="h-full bg-gray-50">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentScreen}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-          className="h-full"
-        >
-          {renderScreen()}
-        </motion.div>
-      </AnimatePresence>
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-        }}
-      />
-    </div>
+    <WalletProvider>
+      <NetworkProvider>
+        <PortfolioProvider>
+          <NFTProvider>
+            <TransactionProvider>
+              <SecurityProvider>
+                <AppContent />
+              </SecurityProvider>
+            </TransactionProvider>
+          </NFTProvider>
+        </PortfolioProvider>
+      </NetworkProvider>
+    </WalletProvider>
   );
 };
 

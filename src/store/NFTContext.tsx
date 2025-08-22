@@ -1,23 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { ethers } from 'ethers';
-
-interface NFT {
-  id: string;
-  tokenId: string;
-  contractAddress: string;
-  network: string;
-  name: string;
-  description: string;
-  imageUrl: string;
-  metadata: Record<string, string | number | boolean>;
-  owner: string;
-  collection: string;
-  attributes?: Array<{
-    trait_type: string;
-    value: string;
-  }>;
-}
+import { NFT } from '../types';
+import { getNFTs } from '../core/nft-manager';
 
 interface NFTState {
   nfts: NFT[];
@@ -51,22 +36,24 @@ interface NFTProviderProps {
   children: ReactNode;
 }
 
-// Get configuration
-function getConfig() {
-  if (typeof window !== 'undefined' && window.CONFIG) {
-    return window.CONFIG;
-  }
+// Get environment variables
+const getEnvVars = () => {
   return {
-    OPENSEA_API_KEY: process.env.OPENSEA_API_KEY || '',
-    ALCHEMY_NFT_API_KEY: process.env.ALCHEMY_NFT_API_KEY || '',
-    INFURA_PROJECT_ID: process.env.INFURA_PROJECT_ID || ''
+    INFURA_PROJECT_ID: process.env.INFURA_PROJECT_ID || '',
+    ETHERSCAN_API_KEY: process.env.ETHERSCAN_API_KEY || '',
+    BSCSCAN_API_KEY: process.env.BSCSCAN_API_KEY || '',
+    POLYGONSCAN_API_KEY: process.env.POLYGONSCAN_API_KEY || '',
+    ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY || '',
+    ALCHEMY_NFT_API_KEY: process.env.ALCHEMY_API_KEY || '', // Use same key for NFT API
+    COINGECKO_API_KEY: process.env.COINGECKO_API_KEY || '',
+    OPENSEA_API_KEY: process.env.OPENSEA_API_KEY || ''
   };
-}
+};
 
 // Fetch NFT metadata from OpenSea
 async function fetchOpenSeaNFTMetadata(contractAddress: string, tokenId: string, network: string) {
   try {
-    const config = getConfig();
+    const config = getEnvVars();
     const apiKey = config.OPENSEA_API_KEY;
     
     if (!apiKey) {
@@ -120,7 +107,7 @@ async function fetchOpenSeaNFTMetadata(contractAddress: string, tokenId: string,
 // Fetch NFT metadata from Alchemy
 async function fetchAlchemyNFTMetadata(contractAddress: string, tokenId: string, network: string) {
   try {
-    const config = getConfig();
+    const config = getEnvVars();
     const apiKey = config.ALCHEMY_NFT_API_KEY;
     
     if (!apiKey) {
@@ -161,7 +148,7 @@ async function fetchAlchemyNFTMetadata(contractAddress: string, tokenId: string,
 async function fetchBlockchainNFTMetadata(contractAddress: string, tokenId: string, network: string) {
   try {
     // Get token URI from smart contract
-    const response = await fetch(`https://mainnet.infura.io/v3/${getConfig().INFURA_PROJECT_ID}`, {
+    const response = await fetch(`https://mainnet.infura.io/v3/${getEnvVars().INFURA_PROJECT_ID}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

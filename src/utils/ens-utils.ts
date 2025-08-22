@@ -1,19 +1,23 @@
 import { ethers } from 'ethers';
 
-// Get configuration
-function getConfig() {
-  if (typeof window !== 'undefined' && window.CONFIG) {
-    return window.CONFIG;
-  }
+// Get environment variables
+const getEnvVars = () => {
   return {
-    ENS_RPC_URL: process.env.ENS_RPC_URL || 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY'
+    INFURA_PROJECT_ID: process.env.INFURA_PROJECT_ID || '',
+    ETHERSCAN_API_KEY: process.env.ETHERSCAN_API_KEY || '',
+    BSCSCAN_API_KEY: process.env.BSCSCAN_API_KEY || '',
+    POLYGONSCAN_API_KEY: process.env.POLYGONSCAN_API_KEY || '',
+    ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY || '',
+    COINGECKO_API_KEY: process.env.COINGECKO_API_KEY || '',
+    OPENSEA_API_KEY: process.env.OPENSEA_API_KEY || '',
+    ENS_RPC_URL: process.env.ENS_RPC_URL || `https://mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`
   };
-}
+};
 
 // Resolve ENS name to address
 export async function resolveENS(ensName: string): Promise<string | null> {
   try {
-    const config = getConfig();
+    const config = getEnvVars();
     const provider = new ethers.JsonRpcProvider(config.ENS_RPC_URL);
     
     const address = await provider.resolveName(ensName);
@@ -27,7 +31,7 @@ export async function resolveENS(ensName: string): Promise<string | null> {
 // Resolve address to ENS name
 export async function lookupENS(address: string): Promise<string | null> {
   try {
-    const config = getConfig();
+    const config = getEnvVars();
     const provider = new ethers.JsonRpcProvider(config.ENS_RPC_URL);
     
     const name = await provider.lookupAddress(address);
@@ -47,7 +51,7 @@ export function validateENSName(name: string): boolean {
 // Get ENS avatar
 export async function getENSAvatar(ensName: string): Promise<string | null> {
   try {
-    const config = getConfig();
+    const config = getEnvVars();
     const provider = new ethers.JsonRpcProvider(config.ENS_RPC_URL);
     
     const avatar = await provider.getAvatar(ensName);
@@ -71,7 +75,7 @@ export async function getENSRecords(ensName: string): Promise<{
   org_telegram?: string;
 }> {
   try {
-    const config = getConfig();
+    const config = getEnvVars();
     const provider = new ethers.JsonRpcProvider(config.ENS_RPC_URL);
     
     const resolver = await provider.getResolver(ensName);

@@ -46,11 +46,27 @@ export interface TransactionResult {
 
 export class TransactionManager {
   private transactions: Transaction[] = [];
-  private pendingTransactions: Map<string, number> = new Map();
+  private pendingTransactions = new Map<string, Transaction>();
+  private walletManager: any; // Will be injected
 
   constructor() {
     this.loadTransactions();
-    this.startPendingTransactionMonitoring();
+  }
+
+  // Set wallet manager reference
+  setWalletManager(walletManager: any) {
+    this.walletManager = walletManager;
+  }
+
+  // Get wallet manager
+  getWalletManager() {
+    return this.walletManager;
+  }
+
+  // Save pending transactions
+  savePendingTransactions() {
+    // Implementation for saving pending transactions
+    console.log('Saving pending transactions:', Array.from(this.pendingTransactions.values()));
   }
 
   // Load transactions from storage
@@ -84,95 +100,75 @@ export class TransactionManager {
     });
   }
 
-  // Send transaction with real implementation
-  async sendTransaction(to: string, value: string, network: string): Promise<string> {
+  // Get wallet for signing
+  async getWalletForSigning(): Promise<any> {
+    if (!this.walletManager) {
+      throw new Error('Wallet manager not initialized');
+    }
+    
+    const currentWallet = await this.walletManager.getCurrentWallet();
+    if (!currentWallet) {
+      throw new Error('No wallet available');
+    }
+    
+    return currentWallet;
+  }
+
+  // Add transaction to list
+  addTransaction(transaction: Transaction): void {
+    this.transactions.push(transaction);
+    this.saveTransactions();
+  }
+
+  // Send transaction (real implementation)
+  async sendTransaction(transaction: {
+    to: string;
+    value: string;
+    gasPrice?: string;
+    gasLimit?: string;
+    data?: string;
+    network: string;
+  }): Promise<Transaction> {
     try {
-      const currentWallet = this.walletManager.getCurrentWallet();
-      if (!currentWallet) {
-        throw new Error('No wallet available');
-      }
-
-      const currentAccount = this.walletManager.getCurrentAccount();
-      if (!currentAccount) {
-        throw new Error('No account available');
-      }
-
-      // Import real blockchain utilities
-      const { ethers } = await import('ethers');
-      const { 
-        getRealBalance, 
-        estimateGas, 
-        getGasPrice, 
-        getTransactionCount,
-        signTransaction,
-        sendSignedTransaction
-      } = await import('../utils/web3-utils');
-
-      // Validate balance
-      const balance = await getRealBalance(currentAccount.address, network);
-      const valueWei = ethers.parseEther(value);
-      const balanceWei = ethers.parseBigInt(balance);
+      const provider = getProvider(transaction.network);
+      const wallet = await this.getWalletForSigning();
       
-      if (balanceWei < valueWei) {
-        throw new Error('Insufficient balance');
-      }
-
-      // Get gas price and estimate gas
-      const gasPrice = await getGasPrice(network);
-      const gasLimit = await estimateGas(
-        currentAccount.address,
-        to,
-        valueWei.toString(),
-        '0x',
-        network
-      );
-
-      // Calculate total cost
-      const gasCost = ethers.parseBigInt(gasLimit) * ethers.parseBigInt(gasPrice);
-      const totalCost = valueWei + gasCost;
-
-      if (balanceWei < totalCost) {
-        throw new Error('Insufficient balance for gas fees');
-      }
-
-      // Get nonce
-      const nonce = await getTransactionCount(currentAccount.address, network);
-
-      // Create transaction object
-      const transaction = {
-        to: to,
-        value: valueWei.toString(),
-        data: '0x',
-        gasLimit: gasLimit,
-        gasPrice: gasPrice,
-        nonce: nonce
+      // Parse values using parseEther for proper BigInt handling
+      const tx = {
+        to: transaction.to,
+        value: ethers.parseEther(transaction.value),
+        gasPrice: transaction.gasPrice ? ethers.parseUnits(transaction.gasPrice, 'gwei') : undefined,
+        gasLimit: transaction.gasLimit ? BigInt(transaction.gasLimit) : BigInt(21000),
+        data: transaction.data || '0x',
+        nonce: await provider.getTransactionCount(wallet.address)
       };
 
-      // Sign transaction (in real implementation, this would prompt for password)
-      const signedTx = await signTransaction(transaction, currentAccount.privateKey, network);
-
-      // Send transaction
-      const txHash = await sendSignedTransaction(signedTx, network);
-
-      // Add to pending transactions
-      const pendingTx = {
-        id: txHash,
-        hash: txHash,
-        from: currentAccount.address,
-        to: to,
-        value: value,
-        network: network,
-        status: 'pending' as const,
+      const txResponse = await wallet.sendTransaction(tx);
+      
+      const newTransaction: Transaction = {
+        id: txResponse.hash,
+        hash: txResponse.hash,
+        from: wallet.address,
+        to: transaction.to,
+        value: transaction.value,
+        gasPrice: tx.gasPrice?.toString() || '0',
+        gasUsed: '0',
+        gasLimit: tx.gasLimit.toString(),
+        data: tx.data,
+        blockNumber: 0,
+        confirmations: 0,
         timestamp: Date.now(),
-        gasUsed: gasLimit,
-        gasPrice: ethers.formatUnits(gasPrice, 'gwei'),
-        nonce: parseInt(nonce, 16)
+        status: 'pending',
+        network: transaction.network,
+        type: 'send',
+        amount: transaction.value,
+        fee: '0',
+        nonce: tx.nonce,
+        isTokenTransaction: false
       };
 
-      this.pendingTransactions.push(pendingTx);
-      this.savePendingTransactions();
-
-      return txHash;
+      this.addTransaction(newTransaction);
+      return newTransaction;
     } catch (error) {
       console.error('Error sending transaction:', error);
       throw error;
@@ -231,8 +227,33 @@ export class TransactionManager {
   }
 
   // Get transaction by hash
-  getTransaction(hash: string): Transaction | undefined {
-    return this.transactions.find(tx => tx.hash === hash);
+  getTransactionByHash(hash: string): Transaction | undefined {
+    return this.pendingTransactions.get(hash) || 
+           this.transactions.find(tx => tx.hash === hash);
+  }
+
+  // Remove pending transaction
+  removePendingTransaction(hash: string): void {
+    this.pendingTransactions.delete(hash);
+  }
+
+  // Add pending transaction
+  addPendingTransaction(transaction: Transaction): void {
+    this.pendingTransactions.set(transaction.hash, transaction);
+  }
+
+  // Update transaction status
+  updateTransactionStatus(hash: string, status: 'pending' | 'confirmed' | 'failed'): void {
+    const pendingTx = this.pendingTransactions.get(hash);
+    if (pendingTx) {
+      pendingTx.status = status;
+      this.pendingTransactions.set(hash, pendingTx);
+    }
+
+    const txIndex = this.transactions.findIndex(tx => tx.hash === hash);
+    if (txIndex > -1) {
+      this.transactions[txIndex].status = status;
+    }
   }
 
   // Get all transactions
@@ -257,7 +278,7 @@ export class TransactionManager {
 
   // Refresh transaction status
   async refreshTransaction(hash: string): Promise<Transaction | null> {
-    const transaction = this.getTransaction(hash);
+    const transaction = this.getTransactionByHash(hash);
     if (!transaction) return null;
 
     try {

@@ -1,3 +1,6 @@
+import CryptoJS from 'crypto-js';
+import bcrypt from 'bcryptjs';
+
 export interface SecuritySettings {
   autoLockTimeout: number; // minutes
   requirePassword: boolean;
@@ -74,55 +77,90 @@ export function decryptSensitiveData(encryptedData: string, password: string): s
   return decryptData(encryptedData, password);
 }
 
-// Encrypt data with password
-export function encryptData(data: string, password: string): string {
-  // In a real implementation, use proper encryption like AES-256
-  // For now, we'll use a simple base64 encoding
-  const encoded = btoa(data + ':' + password);
-  return encoded;
-}
-
-// Decrypt data with password
-export function decryptData(encryptedData: string, password: string): string | null {
+// Hash data (real implementation)
+export function hashData(data: string): string {
   try {
-    // In a real implementation, use proper decryption
-    // For now, we'll use simple base64 decoding
-    const decoded = atob(encryptedData);
-    const parts = decoded.split(':');
-    if (parts[1] === password) {
-      return parts[0];
-    }
-    return null;
+    const hash = CryptoJS.SHA256(data).toString();
+    return hash;
   } catch (error) {
-    return null;
+    console.error('Error hashing data:', error);
+    throw error;
   }
 }
 
-// Hash password
-export function hashPassword(password: string): string {
-  return hashData(password);
-}
-
-// Verify password
-export function verifyPassword(password: string, hashedPassword: string): boolean {
-  return hashPassword(password) === hashedPassword;
-}
-
-// Hash data (real implementation)
-export async function hashData(data: string): Promise<string> {
+// Hash password with salt (real implementation)
+export async function hashPassword(password: string, saltRounds: number = 12): Promise<string> {
   try {
-    // Use Web Crypto API for real hashing
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(data);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-    
-    // Convert to hex string
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    
-    return hashHex;
+    const salt = await bcrypt.genSalt(saltRounds);
+    const hash = await bcrypt.hash(password, salt);
+    return hash;
   } catch (error) {
-    console.error('Error hashing data:', error);
+    console.error('Error hashing password:', error);
+    throw error;
+  }
+}
+
+// Verify password (real implementation)
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch (error) {
+    console.error('Error verifying password:', error);
+    return false;
+  }
+}
+
+// Generate random salt
+export function generateSalt(length: number = 32): string {
+  try {
+    return CryptoJS.lib.WordArray.random(length).toString();
+  } catch (error) {
+    console.error('Error generating salt:', error);
+    throw error;
+  }
+}
+
+// Encrypt data with AES-256
+export function encryptData(data: string, key: string): string {
+  try {
+    const encrypted = CryptoJS.AES.encrypt(data, key).toString();
+    return encrypted;
+  } catch (error) {
+    console.error('Error encrypting data:', error);
+    throw error;
+  }
+}
+
+// Decrypt data with AES-256
+export function decryptData(encryptedData: string, key: string): string {
+  try {
+    const decrypted = CryptoJS.AES.decrypt(encryptedData, key);
+    return decrypted.toString(CryptoJS.enc.Utf8);
+  } catch (error) {
+    console.error('Error decrypting data:', error);
+    throw error;
+  }
+}
+
+// Generate secure random string
+export function generateSecureRandom(length: number = 32): string {
+  try {
+    return CryptoJS.lib.WordArray.random(length).toString();
+  } catch (error) {
+    console.error('Error generating secure random:', error);
+    throw error;
+  }
+}
+
+// Generate API key
+export function generateApiKey(): string {
+  try {
+    const timestamp = Date.now().toString();
+    const random = CryptoJS.lib.WordArray.random(16).toString();
+    const combined = timestamp + random;
+    return CryptoJS.SHA256(combined).toString().substring(0, 32);
+  } catch (error) {
+    console.error('Error generating API key:', error);
     throw error;
   }
 }
@@ -153,26 +191,40 @@ export function validatePasswordStrength(password: string): {
   if (password.length < 8) {
     feedback.push('Password must be at least 8 characters long');
   } else {
-    score += Math.min(password.length - 8, 4);
+    score += 1;
   }
 
-  // Character variety checks
-  if (/[a-z]/.test(password)) score += 1;
-  if (/[A-Z]/.test(password)) score += 1;
-  if (/[0-9]/.test(password)) score += 1;
-  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+  // Uppercase check
+  if (!/[A-Z]/.test(password)) {
+    feedback.push('Password must contain at least one uppercase letter');
+  } else {
+    score += 1;
+  }
 
-  // Feedback based on missing character types
-  if (!/[a-z]/.test(password)) feedback.push('Add lowercase letters');
-  if (!/[A-Z]/.test(password)) feedback.push('Add uppercase letters');
-  if (!/[0-9]/.test(password)) feedback.push('Add numbers');
-  if (!/[^A-Za-z0-9]/.test(password)) feedback.push('Add special characters');
+  // Lowercase check
+  if (!/[a-z]/.test(password)) {
+    feedback.push('Password must contain at least one lowercase letter');
+  } else {
+    score += 1;
+  }
 
-  const isValid = score >= 3 && password.length >= 8;
+  // Number check
+  if (!/\d/.test(password)) {
+    feedback.push('Password must contain at least one number');
+  } else {
+    score += 1;
+  }
+
+  // Special character check
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    feedback.push('Password must contain at least one special character');
+  } else {
+    score += 1;
+  }
 
   return {
-    isValid,
-    score: Math.min(score, 5),
+    isValid: score >= 4,
+    score,
     feedback
   };
 }
@@ -299,5 +351,62 @@ export function secureRetrieve(key: string, password: string): any {
   } catch (error) {
     console.error('Error retrieving secure data:', error);
     throw new Error('Failed to retrieve secure data');
+  }
+} 
+
+// Sanitize input
+export function sanitizeInput(input: string): string {
+  try {
+    // Remove potentially dangerous characters
+    return input.replace(/[<>\"'&]/g, '');
+  } catch (error) {
+    console.error('Error sanitizing input:', error);
+    return '';
+  }
+}
+
+// Validate email format
+export function validateEmail(email: string): boolean {
+  try {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  } catch (error) {
+    console.error('Error validating email:', error);
+    return false;
+  }
+}
+
+// Generate recovery phrase
+export function generateRecoveryPhrase(): string {
+  try {
+    const words = [
+      'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse',
+      'access', 'accident', 'account', 'accuse', 'achieve', 'acid', 'acoustic', 'acquire', 'across', 'act',
+      'action', 'actor', 'actual', 'adapt', 'add', 'addict', 'address', 'adjust', 'admit', 'adult',
+      'advance', 'advice', 'aerobic', 'affair', 'afford', 'afraid', 'again', 'age', 'agent', 'agree',
+      'ahead', 'aim', 'air', 'airport', 'aisle', 'alarm', 'album', 'alcohol', 'alert', 'alien'
+    ];
+    
+    const phrase: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const randomIndex = Math.floor(Math.random() * words.length);
+      phrase.push(words[randomIndex]);
+    }
+    
+    return phrase.join(' ');
+  } catch (error) {
+    console.error('Error generating recovery phrase:', error);
+    throw error;
+  }
+}
+
+// Validate recovery phrase
+export function validateRecoveryPhrase(phrase: string): boolean {
+  try {
+    const words = phrase.split(' ');
+    return words.length === 12 && words.every(word => word.length > 0);
+  } catch (error) {
+    console.error('Error validating recovery phrase:', error);
+    return false;
   }
 } 

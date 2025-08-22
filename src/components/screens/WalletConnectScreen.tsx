@@ -158,3 +158,5 @@ export const WalletConnectScreen: React.FC = () => {
     </div>
   );
 }; 
+
+export default WalletConnectScreen; 

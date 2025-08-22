@@ -1,247 +1,161 @@
-// PayCio Wallet Injected Script
-// This script is injected into web pages to provide wallet functionality
-
-interface WalletProvider {
-  isPayCioWallet?: boolean;
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-  on: (eventName: string, handler: (data: any) => void) => void;
-  removeListener: (eventName: string, handler: (data: any) => void) => void;
-  selectedAddress?: string;
-  isConnected?: boolean;
-  chainId?: string;
-}
-
-interface PayCioWalletProvider extends WalletProvider {
-  isPayCioWallet: true;
-  version: string;
-  networkVersion: string;
-  send: (payload: any, callback?: (error: any, response: any) => void) => void;
-  sendAsync: (payload: any, callback: (error: any, response: any) => void) => void;
-  enable: () => Promise<string[]>;
-  autoRefreshOnNetworkChange: boolean;
-}
-
-// Extend Window interface for ethereum and web3
+// Global declarations for window extensions
 declare global {
   interface Window {
     ethereum?: PayCioWalletProvider;
     web3?: {
-      currentProvider?: PayCioWalletProvider;
+      currentProvider: PayCioWalletProvider;
     };
   }
 }
 
-class PayCioWalletInjected {
-  private provider: PayCioWalletProvider;
-  private isConnected = false;
-  private selectedAddress: string | null = null;
-  private chainId: string | null = null;
-  private listeners: Map<string, Set<(data: any) => void>> = new Map();
-  private pendingRequests = new Map<number, { resolve: (value: any) => void; reject: (error: any) => void }>();
+interface PayCioWalletProvider {
+  isPayCio: boolean;
+  chainId: string;
+  networkVersion: string;
+  selectedAddress: string | null;
+  isConnected(): boolean;
+  request(args: { method: string; params?: any[] }): Promise<any>;
+  enable(): Promise<string[]>;
+  send(method: string, params?: any[]): Promise<any>;
+  sendAsync(payload: any, callback: (error: any, result: any) => void): void;
+  on(event: string, handler: (...args: any[]) => void): void;
+  removeListener(event: string, handler: (...args: any[]) => void): void;
+}
+
+class PayCioWalletInjected implements PayCioWalletProvider {
+  public isPayCio = true;
+  public chainId = '0x1';
+  public networkVersion = '1';
+  public selectedAddress: string | null = null;
+  private pendingRequests = new Map<string, { resolve: Function; reject: Function }>();
+  private eventHandlers = new Map<string, Function[]>();
 
   constructor() {
-    this.provider = this.createProvider();
-    this.injectProvider();
     this.setupMessageListener();
+    this.requestAccounts();
   }
 
-  private createProvider(): PayCioWalletProvider {
-    const provider: PayCioWalletProvider = {
-      isPayCioWallet: true,
-      version: '1.0.0',
-      networkVersion: '1',
-      autoRefreshOnNetworkChange: false,
-      selectedAddress: undefined,
-      isConnected: false,
-      chainId: undefined,
-
-      request: async (args: { method: string; params?: any[] }) => {
-        return this.handleRequest(args);
-      },
-
-      send: (payload: any, callback?: (error: any, response: any) => void) => {
-        this.handleSend(payload, callback);
-      },
-
-      sendAsync: (payload: any, callback: (error: any, response: any) => void) => {
-        this.handleSend(payload, callback);
-      },
-
-      enable: async () => {
-        const result = await this.handleRequest({ method: 'eth_requestAccounts' });
-        return result;
-      },
-
-      on: (eventName: string, handler: (data: any) => void) => {
-        this.addEventListener(eventName, handler);
-      },
-
-      removeListener: (eventName: string, handler: (data: any) => void) => {
-        this.removeEventListener(eventName, handler);
+  private setupMessageListener() {
+    window.addEventListener('message', (event) => {
+      if (event.source !== window) return;
+      
+      const { data } = event;
+      if (data.type === 'PAYCIO_RESPONSE') {
+        const { id, result, error } = data;
+        const pending = this.pendingRequests.get(id);
+        
+        if (pending) {
+          this.pendingRequests.delete(id);
+          if (error) {
+            pending.reject(new Error(error.message));
+          } else {
+            pending.resolve(result);
+          }
+        }
       }
-    };
-
-    return provider;
+      
+      if (data.type === 'PAYCIO_EVENT') {
+        this.handleEvent(data.event, data.data);
+      }
+    });
   }
 
-  private async handleRequest(args: { method: string; params?: any[] }): Promise<any> {
-    try {
-      const response = await this.sendMessageToExtension({
-        type: 'WALLET_REQUEST',
-        method: args.method,
-        params: args.params || []
-      });
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      return response.result;
-    } catch (error) {
-      console.error('PayCio Wallet request failed:', error);
-      throw error;
+  private handleEvent(eventName: string, eventData: any) {
+    const handlers = this.eventHandlers.get(eventName);
+    if (handlers) {
+      handlers.forEach(handler => handler(eventData));
     }
   }
 
-  private handleSend(payload: any, callback?: (error: any, response: any) => void) {
-    this.handleRequest(payload)
-      .then((result) => {
-        if (callback) {
-          callback(null, { id: payload.id, jsonrpc: '2.0', result });
-        }
-      })
-      .catch((error) => {
-        if (callback) {
-          callback(error, { id: payload.id, jsonrpc: '2.0', error: { message: error.message } });
-        }
-      });
+  private async requestAccounts() {
+    try {
+      const accounts = await this.request({ method: 'eth_accounts' });
+      if (accounts && accounts.length > 0) {
+        this.selectedAddress = accounts[0];
+        this.handleEvent('accountsChanged', accounts);
+      }
+    } catch (error) {
+      console.error('Failed to get accounts:', error);
+    }
   }
 
-  private sendMessageToExtension(message: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const messageId = Date.now() + Math.random();
-      
-      // Store the callback
-      this.pendingRequests.set(messageId, { resolve, reject });
-      
-      // Send message to content script
-      window.postMessage({
-        source: 'paycio-wallet-injected',
-        id: messageId,
-        ...message
-      }, '*');
+  isConnected(): boolean {
+    return this.selectedAddress !== null;
+  }
 
+  async request(args: { method: string; params?: any[] }): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const id = Math.random().toString(36).substring(7);
+      this.pendingRequests.set(id, { resolve, reject });
+      
+      window.postMessage({
+        type: 'PAYCIO_REQUEST',
+        id,
+        method: args.method,
+        params: args.params || []
+      }, '*');
+      
       // Timeout after 30 seconds
       setTimeout(() => {
-        if (this.pendingRequests.has(messageId)) {
-          this.pendingRequests.delete(messageId);
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id);
           reject(new Error('Request timeout'));
         }
       }, 30000);
     });
   }
 
-  private setupMessageListener() {
-    window.addEventListener('message', (event) => {
-      if (event.source !== window || event.data.source !== 'paycio-wallet-content') {
-        return;
-      }
-
-      const { id, result, error } = event.data;
-      
-      if (this.pendingRequests.has(id)) {
-        const { resolve, reject } = this.pendingRequests.get(id)!;
-        this.pendingRequests.delete(id);
-        
-        if (error) {
-          reject(new Error(error));
-        } else {
-          resolve(result);
-        }
-      }
-
-      // Handle wallet state updates
-      if (event.data.type === 'WALLET_STATE_UPDATE') {
-        this.updateWalletState(event.data.state);
-      }
-    });
+  async enable(): Promise<string[]> {
+    const accounts = await this.request({ method: 'eth_requestAccounts' });
+    if (accounts && accounts.length > 0) {
+      this.selectedAddress = accounts[0];
+    }
+    return accounts || [];
   }
 
-  private updateWalletState(state: any) {
-    if (state.selectedAddress !== this.selectedAddress) {
-      this.selectedAddress = state.selectedAddress;
-      this.provider.selectedAddress = state.selectedAddress;
-      this.emit('accountsChanged', [state.selectedAddress]);
-    }
-
-    if (state.chainId !== this.chainId) {
-      this.chainId = state.chainId;
-      this.provider.chainId = state.chainId;
-      this.emit('chainChanged', state.chainId);
-    }
-
-    if (state.isConnected !== this.isConnected) {
-      this.isConnected = state.isConnected;
-      this.provider.isConnected = state.isConnected;
-      this.emit('connect', { chainId: state.chainId });
-    }
+  async send(method: string, params?: any[]): Promise<any> {
+    return this.request({ method, params });
   }
 
-  private addEventListener(eventName: string, handler: (data: any) => void) {
-    if (!this.listeners.has(eventName)) {
-      this.listeners.set(eventName, new Set());
-    }
-    this.listeners.get(eventName)!.add(handler);
+  sendAsync(payload: any, callback: (error: any, result: any) => void): void {
+    this.request({ method: payload.method, params: payload.params })
+      .then(result => callback(null, { id: payload.id, jsonrpc: '2.0', result }))
+      .catch(error => callback(error, null));
   }
 
-  private removeEventListener(eventName: string, handler: (data: any) => void) {
-    const handlers = this.listeners.get(eventName);
+  on(event: string, handler: (...args: any[]) => void): void {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
+    this.eventHandlers.get(event)!.push(handler);
+  }
+
+  removeListener(event: string, handler: (...args: any[]) => void): void {
+    const handlers = this.eventHandlers.get(event);
     if (handlers) {
-      handlers.delete(handler);
+      const index = handlers.indexOf(handler);
+      if (index > -1) {
+        handlers.splice(index, 1);
+      }
     }
-  }
-
-  private emit(eventName: string, data: any) {
-    const handlers = this.listeners.get(eventName);
-    if (handlers) {
-      handlers.forEach(handler => {
-        try {
-          handler(data);
-        } catch (error) {
-          console.error('Error in event handler:', error);
-        }
-      });
-    }
-  }
-
-  private injectProvider() {
-    // Inject into window.ethereum
-    if (!window.ethereum) {
-      Object.defineProperty(window, 'ethereum', {
-        value: this.provider,
-        writable: false,
-        configurable: false
-      });
-    }
-
-    // Inject into window.web3
-    if (typeof window.web3 !== 'undefined') {
-      window.web3.currentProvider = this.provider;
-    }
-
-    // Notify that PayCio Wallet is available
-    window.dispatchEvent(new CustomEvent('paycio-wallet-ready', {
-      detail: { provider: this.provider }
-    }));
-
-    console.log('PayCio Wallet injected successfully');
   }
 }
 
-// Initialize the injected wallet
-new PayCioWalletInjected();
+// Inject the wallet provider
+const payCioWallet = new PayCioWalletInjected();
 
-// Export for potential external use
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = PayCioWalletInjected;
-} 
+// Set up window.ethereum
+if (!window.ethereum) {
+  window.ethereum = payCioWallet;
+} else {
+  console.warn('Another wallet provider is already installed');
+}
+
+// Set up window.web3 for legacy compatibility
+if (!window.web3) {
+  window.web3 = {
+    currentProvider: payCioWallet
+  };
+}
+
+console.log('PayCio Wallet injected script loaded'); 

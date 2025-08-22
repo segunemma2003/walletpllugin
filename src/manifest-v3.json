@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Advanced Multi-Chain Wallet",
+  "name": "PayCio Wallet",
   "version": "2.0.0",
   "description": "Secure multi-chain cryptocurrency wallet supporting Bitcoin, Ethereum, Solana, TRON, and more",
   "permissions": [
@@ -16,7 +16,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Advanced Multi-Chain Wallet",
+    "default_title": "PayCio Wallet",
     "default_icon": {
       "16": "assets/icon16.png",
       "32": "assets/icon32.png",
@@ -25,20 +25,28 @@
     }
   },
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["injected.js", "assets/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "injected.js",
+        "assets/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "options_page": "options.html",
@@ -52,7 +60,9 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "externally_connectable": {
-    "matches": ["<all_urls>"]
+    "matches": [
+      "<all_urls>"
+    ]
   },
   "commands": {
     "_execute_action": {
@@ -60,7 +70,7 @@
         "default": "Ctrl+Shift+W",
         "mac": "Command+Shift+W"
       },
-      "description": "Open Advanced Multi-Chain Wallet"
+      "description": "Open PayCio Wallet"
     }
   }
 } 

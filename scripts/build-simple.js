@@ -1,10 +1,8 @@
-#!/usr/bin/env node
-
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-console.log('🚀 PayCio Wallet Build System\n');
+console.log('🚀 PayCio Wallet Simple Build System\n');
 
 // Get browser from command line args
 const args = process.argv.slice(2);
@@ -21,10 +19,10 @@ if (fs.existsSync(browserDistPath)) {
   console.log(`✅ ${browser} build directory does not exist, skipping cleanup`);
 }
 
-// Build for specified browser
+// Build for specified browser using extension-specific config
 console.log(`\nBuilding for ${browser}...`);
 try {
-  execSync(`npx webpack --mode production --env browser=${browser}`, { 
+  execSync(`npx webpack --config webpack.extension.config.js --env browser=${browser}`, { 
     stdio: 'inherit',
     cwd: process.cwd()
   });
@@ -66,19 +64,6 @@ try {
     console.log('1. Go to browser extensions page');
     console.log('2. Enable "Developer mode"');
     console.log(`3. Click "Load unpacked" and select dist/${browser}/`);
-    
-    // List all available builds
-    if (fs.existsSync('dist')) {
-      const builds = fs.readdirSync('dist').filter(dir => 
-        fs.statSync(path.join('dist', dir)).isDirectory()
-      );
-      if (builds.length > 1) {
-        console.log('\n📦 Available builds:');
-        builds.forEach(build => {
-          console.log(`   - dist/${build}/`);
-        });
-      }
-    }
   } else {
     console.log('\n⚠️  Some files are missing. Build may be incomplete.');
   }

@@ -12,7 +12,56 @@ export interface Network {
 }
 
 export class NetworkManager {
-  private networks: Network[];
+  private networks: Network[] = [
+    {
+      id: 'ethereum',
+      isCustom: false,
+      isEnabled: true,
+      name: 'Ethereum',
+      symbol: 'ETH',
+      chainId: '1',
+      rpcUrl: `https://mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,
+      explorerUrl: 'https://api.etherscan.io/api',
+      apiKey: process.env.ETHERSCAN_API_KEY || '',
+      nativeCurrency: {
+        name: 'Ether',
+        symbol: 'ETH',
+        decimals: 18
+      }
+    },
+    {
+      id: 'polygon',
+      isCustom: false,
+      isEnabled: true,
+      name: 'Polygon',
+      symbol: 'MATIC',
+      chainId: '137',
+      rpcUrl: 'https://polygon-rpc.com',
+      explorerUrl: 'https://api.polygonscan.com/api',
+      apiKey: process.env.POLYGONSCAN_API_KEY || '',
+      nativeCurrency: {
+        name: 'MATIC',
+        symbol: 'MATIC',
+        decimals: 18
+      }
+    },
+    {
+      id: 'bsc',
+      isCustom: false,
+      isEnabled: true,
+      name: 'BNB Smart Chain',
+      symbol: 'BNB',
+      chainId: '56',
+      rpcUrl: 'https://bsc-dataseed.binance.org',
+      explorerUrl: 'https://api.bscscan.com/api',
+      apiKey: process.env.BSCSCAN_API_KEY || '',
+      nativeCurrency: {
+        name: 'BNB',
+        symbol: 'BNB',
+        decimals: 18
+      }
+    }
+  ];
   private currentNetwork: Network | null = null;
 
   constructor() {
@@ -64,6 +113,11 @@ export class NetworkManager {
   // Get all networks
   getAllNetworks(): Network[] {
     return this.networks;
+  }
+
+  // Get all networks (alias for getAllNetworks)
+  async getNetworks(): Promise<Network[]> {
+    return this.getAllNetworks();
   }
 
   // Get current network
