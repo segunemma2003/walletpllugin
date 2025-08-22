@@ -10,61 +10,68 @@ const networkManager = new NetworkManager();
 const transactionManager = new TransactionManager();
 const defiManager = new DeFiManager();
 
-console.log('SOW Wallet content script initialized');
+console.log('PayCio Wallet content script initialized');
 
 // Listen for messages from injected script
 window.addEventListener('message', async (event) => {
   // Only accept messages from the same window
   if (event.source !== window) return;
 
-  // Only accept messages that we know are ours
-  if (!event.data.type || !event.data.type.startsWith('WALLET_')) return;
+  // Only accept messages from our injected script
+  if (event.data.source !== 'paycio-wallet-injected') return;
 
   console.log('Content script received message:', event.data);
 
   try {
     let response;
 
-    switch (event.data.type) {
-      case 'WALLET_CONNECT':
-        response = await handleWalletConnect();
-        break;
-      case 'WALLET_GET_ACCOUNTS':
-        response = await handleGetAccounts();
-        break;
-      case 'WALLET_GET_BALANCE':
-        response = await handleGetBalance(event.data.params);
-        break;
-      case 'WALLET_SIGN_TRANSACTION':
-        response = await handleSignTransaction();
-        break;
-      case 'WALLET_SEND_TRANSACTION':
-        response = await handleSendTransaction(event.data.params);
-        break;
-      case 'WALLET_SWITCH_NETWORK':
-        response = await handleSwitchNetwork(event.data.params);
-        break;
-      case 'WALLET_GET_NETWORKS':
-        response = await handleGetNetworks();
-        break;
-      case 'WALLET_GET_NFTS':
-        response = await handleGetNFTs(event.data.params);
-        break;
-      case 'WALLET_GET_PORTFOLIO':
-        response = await handleGetPortfolio();
-        break;
-      case 'WALLET_GET_DEFI_POSITIONS':
-        response = await handleGetDeFiPositions();
-        break;
-      default:
-        response = { success: false, error: 'Unknown message type' };
+    // Handle the new WALLET_REQUEST format
+    if (event.data.type === 'WALLET_REQUEST') {
+      response = await handleWalletRequest(event.data.method, event.data.params);
+    } else {
+      // Handle legacy message types
+      switch (event.data.type) {
+        case 'WALLET_CONNECT':
+          response = await handleWalletConnect();
+          break;
+        case 'WALLET_GET_ACCOUNTS':
+          response = await handleGetAccounts();
+          break;
+        case 'WALLET_GET_BALANCE':
+          response = await handleGetBalance(event.data.params);
+          break;
+        case 'WALLET_SIGN_TRANSACTION':
+          response = await handleSignTransaction();
+          break;
+        case 'WALLET_SEND_TRANSACTION':
+          response = await handleSendTransaction(event.data.params);
+          break;
+        case 'WALLET_SWITCH_NETWORK':
+          response = await handleSwitchNetwork(event.data.params);
+          break;
+        case 'WALLET_GET_NETWORKS':
+          response = await handleGetNetworks();
+          break;
+        case 'WALLET_GET_NFTS':
+          response = await handleGetNFTs(event.data.params);
+          break;
+        case 'WALLET_GET_PORTFOLIO':
+          response = await handleGetPortfolio();
+          break;
+        case 'WALLET_GET_DEFI_POSITIONS':
+          response = await handleGetDeFiPositions();
+          break;
+        default:
+          response = { success: false, error: 'Unknown message type' };
+      }
     }
 
     // Send response back to injected script
     window.postMessage({
-      type: 'WALLET_RESPONSE',
+      source: 'paycio-wallet-content',
       id: event.data.id,
-      data: response
+      result: response.success ? response.data || response : undefined,
+      error: response.success ? undefined : response.error
     }, '*');
 
   } catch (error) {
@@ -72,12 +79,10 @@ window.addEventListener('message', async (event) => {
     
     // Send error response
     window.postMessage({
-      type: 'WALLET_RESPONSE',
+      source: 'paycio-wallet-content',
       id: event.data.id,
-      data: {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
+      result: undefined,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }, '*');
   }
 });
@@ -211,6 +216,43 @@ async function handleGetDeFiPositions() {
     return { success: true, positions };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get DeFi positions' };
+  }
+}
+
+// Handle wallet request (new format)
+async function handleWalletRequest(method: string, params: any[] = []) {
+  try {
+    switch (method) {
+      case 'eth_requestAccounts':
+      case 'eth_accounts':
+        return await handleGetAccounts();
+      case 'eth_getBalance':
+        const [address, blockTag] = params;
+        return await handleGetBalance({ address, network: 'ethereum' });
+      case 'eth_sendTransaction':
+        const [transaction] = params;
+        return await handleSendTransaction({
+          to: transaction.to,
+          value: transaction.value,
+          network: 'ethereum'
+        });
+      case 'eth_signTransaction':
+        return await handleSignTransaction();
+      case 'eth_chainId':
+        return { success: true, data: '0x1' }; // Ethereum mainnet
+      case 'net_version':
+        return { success: true, data: '1' }; // Ethereum mainnet
+      case 'eth_getTransactionCount':
+        return { success: true, data: '0x0' }; // Mock nonce
+      case 'eth_estimateGas':
+        return { success: true, data: '0x5208' }; // Mock gas estimate (21000)
+      case 'eth_gasPrice':
+        return { success: true, data: '0x3b9aca00' }; // Mock gas price (1 gwei)
+      default:
+        return { success: false, error: `Method ${method} not supported` };
+    }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 

@@ -159,7 +159,7 @@ chrome.alarms.onAlarm.addListener(async (alarm: chrome.alarms.Alarm) => {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'assets/icon48.png',
-      title: 'SOW Wallet',
+      title: 'PayCio Wallet',
       message: 'Your wallet has been locked due to inactivity.'
     });
   }
@@ -179,6 +179,6 @@ chrome.storage.local.onChanged.addListener((changes: { [key: string]: chrome.sto
       }
     });
   }
-}); 
-console.log('SOW Wallet background service worker initialized'); 
-console.log('SOW Wallet background service worker initialized'); 
+});
+
+console.log('PayCio Wallet background service worker initialized'); 

@@ -36,8 +36,8 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="h-full bg-gray-50 p-6">
-      <div className="max-w-sm mx-auto">
+    <div className="p-6 h-full bg-gray-50">
+      <div className="mx-auto max-w-sm">
         {step === 'generate' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -45,10 +45,10 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
             className="text-center"
           >
             <div className="mb-8">
-              <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="flex justify-center items-center mx-auto mb-4 w-16 h-16 rounded-full bg-primary-100">
                 <ArrowRight className="w-8 h-8 text-primary-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Create New Wallet</h2>
+              <h2 className="mb-2 text-2xl font-bold text-gray-900">Create New Wallet</h2>
               <p className="text-gray-600">
                 Generate a new wallet with a secure seed phrase
               </p>
@@ -58,7 +58,7 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleGenerateWallet}
-              className="w-full bg-primary-600 text-white font-semibold py-4 px-6 rounded-xl shadow-lg hover:bg-primary-700 transition-colors"
+              className="px-6 py-4 w-full font-semibold text-white rounded-xl shadow-lg transition-colors bg-primary-600 hover:bg-primary-700"
             >
               Generate Seed Phrase
             </motion.button>
@@ -71,14 +71,14 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
             animate={{ opacity: 1, y: 0 }}
           >
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Backup Your Seed Phrase</h2>
-              <p className="text-gray-600 text-sm">
+              <h2 className="mb-2 text-xl font-bold text-gray-900">Backup Your Seed Phrase</h2>
+              <p className="text-sm text-gray-600">
                 Write down these 12 words in a secure location. You'll need them to recover your wallet.
               </p>
             </div>
 
-            <div className="bg-white rounded-xl p-4 border border-gray-200 mb-6">
-              <div className="flex items-center justify-between mb-3">
+            <div className="p-4 mb-6 bg-white rounded-xl border border-gray-200">
+              <div className="flex justify-between items-center mb-3">
                 <span className="text-sm font-medium text-gray-700">Seed Phrase</span>
                 <div className="flex items-center space-x-2">
                   <button
@@ -109,9 +109,9 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
                   {seedPhrase.split(' ').map((word, index) => (
                     <div
                       key={index}
-                      className="bg-gray-50 rounded-lg px-3 py-2 text-sm font-mono"
+                      className="px-3 py-2 font-mono text-sm bg-gray-50 rounded-lg"
                     >
-                      <span className="text-gray-500 text-xs mr-1">{index + 1}.</span>
+                      <span className="mr-1 text-xs text-gray-500">{index + 1}.</span>
                       {word}
                     </div>
                   ))}
@@ -121,9 +121,9 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
                   {Array.from({ length: 12 }, (_, index) => (
                     <div
                       key={index}
-                      className="bg-gray-50 rounded-lg px-3 py-2 text-sm font-mono"
+                      className="px-3 py-2 font-mono text-sm bg-gray-50 rounded-lg"
                     >
-                      <span className="text-gray-500 text-xs mr-1">{index + 1}.</span>
+                      <span className="mr-1 text-xs text-gray-500">{index + 1}.</span>
                       ••••••
                     </div>
                   ))}
@@ -131,17 +131,17 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
               )}
             </div>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="p-4 mb-6 bg-yellow-50 rounded-lg border border-yellow-200">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <svg className="w-5 h-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-yellow-800">Security Warning</h3>
                   <div className="mt-2 text-sm text-yellow-700">
-                    <ul className="list-disc list-inside space-y-1">
+                    <ul className="space-y-1 list-disc list-inside">
                       <li>Never share your seed phrase with anyone</li>
                       <li>Store it in a secure, offline location</li>
                       <li>Don't take screenshots or store it digitally</li>
@@ -155,7 +155,7 @@ const CreateWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleConfirm}
-              className="w-full bg-primary-600 text-white font-semibold py-4 px-6 rounded-xl shadow-lg hover:bg-primary-700 transition-colors"
+              className="px-6 py-4 w-full font-semibold text-white rounded-xl shadow-lg transition-colors bg-primary-600 hover:bg-primary-700"
             >
               I've Written It Down
             </motion.button>
