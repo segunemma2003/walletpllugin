@@ -92,16 +92,12 @@ async function handleGetBalance(message: any, sendResponse: (response: any) => v
   try {
     const { address, network } = message.params;
     
-    // Mock balance for now - will be replaced with real API calls
-    const mockBalance = {
-      balance: '0.0',
-      symbol: network === 'ethereum' ? 'ETH' : 'BTC',
-      decimals: 18
-    };
+    // Get real balance from blockchain
+    const balance = await getRealBalance(address, network);
     
     sendResponse({
       success: true,
-      balance: mockBalance
+      balance
     });
   } catch (error) {
     sendResponse({
@@ -109,6 +105,53 @@ async function handleGetBalance(message: any, sendResponse: (response: any) => v
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+}
+
+// Get real balance from blockchain
+async function getRealBalance(address: string, network: string) {
+  const rpcUrls = {
+    ethereum: 'https://mainnet.infura.io/v3/' + (process.env.INFURA_PROJECT_ID || ''),
+    polygon: 'https://polygon-rpc.com',
+    bsc: 'https://bsc-dataseed.binance.org',
+    arbitrum: 'https://arb1.arbitrum.io/rpc'
+  };
+
+  const rpcUrl = rpcUrls[network as keyof typeof rpcUrls];
+  if (!rpcUrl) {
+    throw new Error(`Unsupported network: ${network}`);
+  }
+
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'eth_getBalance',
+      params: [address, 'latest'],
+      id: 1,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error.message);
+  }
+
+  // Convert from wei to ether
+  const balanceWei = BigInt(data.result);
+  const balanceEth = Number(balanceWei) / Math.pow(10, 18);
+
+  return {
+    balance: balanceEth.toString(),
+    symbol: network === 'ethereum' ? 'ETH' : network === 'polygon' ? 'MATIC' : network === 'bsc' ? 'BNB' : 'ETH',
+    decimals: 18
+  };
 }
 
 // Handle sign transaction
@@ -125,11 +168,38 @@ async function handleSignTransaction(message: any, sendResponse: (response: any)
       return;
     }
 
-    // For now, return a mock signature
-    // This will be replaced with real signing logic
+    // Get real transaction signing
+    const { transaction, password } = message.params;
+    
+    if (!password) {
+      sendResponse({
+        success: false,
+        error: 'Password required for signing'
+      });
+      return;
+    }
+
+    // Import real signing utilities
+    const { ethers } = await import('ethers');
+    const { decryptData } = await import('../utils/crypto-utils');
+    
+    // Decrypt private key
+    const privateKey = await decryptData(currentWallet.privateKey, password);
+    if (!privateKey) {
+      sendResponse({
+        success: false,
+        error: 'Invalid password'
+      });
+      return;
+    }
+
+    // Create wallet instance and sign transaction
+    const wallet = new ethers.Wallet(privateKey);
+    const signedTx = await wallet.signTransaction(transaction);
+    
     sendResponse({
       success: true,
-      signature: '0x' + '0'.repeat(130) // Mock signature
+      signature: signedTx
     });
   } catch (error) {
     sendResponse({

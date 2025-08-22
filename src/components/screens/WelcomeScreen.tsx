@@ -1,123 +1,194 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { Wallet, Download, Shield, Zap, Globe, Lock } from 'lucide-react';
-import type { ScreenProps } from '../../types/index';
 
-const WelcomeScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
+interface WelcomeScreenProps {
+  onNavigate: (screen: string) => void;
+  onWalletCreated?: () => void;
+  onWalletUnlocked?: () => void;
+}
+
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onNavigate }) => {
   const features = [
     {
-      icon: <Globe className="w-6 h-6" />,
+      icon: '🌐',
       title: 'Multi-Chain Support',
       description: 'Ethereum, Bitcoin, Solana, TRON, and more'
     },
     {
-      icon: <Shield className="w-6 h-6" />,
+      icon: '🔒',
       title: 'Advanced Security',
       description: 'Hardware wallet support & encryption'
     },
     {
-      icon: <Zap className="w-6 h-6" />,
+      icon: '⚡',
       title: 'Lightning Fast',
       description: 'Instant transactions & real-time updates'
     },
     {
-      icon: <Lock className="w-6 h-6" />,
+      icon: '🔐',
       title: 'Privacy First',
       description: 'Your keys, your crypto, your control'
     }
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="h-full bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-600 flex flex-col"
+    <div 
+      style={{
+        height: '100%',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        color: 'white'
+      }}
     >
       {/* Header */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="mb-8"
-        >
-          <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-6 mx-auto">
-            <Wallet className="w-10 h-10 text-white" />
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem',
+        textAlign: 'center'
+      }}>
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            background: 'rgba(255, 255, 255, 0.2)',
+            borderRadius: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '1.5rem',
+            margin: '0 auto 1.5rem'
+          }}>
+            <span style={{ fontSize: '2.5rem' }}>🔗</span>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">SOW Wallet</h1>
-          <p className="text-white/80 text-lg">Your gateway to the decentralized world</p>
-        </motion.div>
+          <h1 style={{ 
+            fontSize: '2.5rem', 
+            fontWeight: 'bold', 
+            marginBottom: '0.5rem',
+            margin: '0 0 0.5rem 0'
+          }}>
+            PayCio Wallet
+          </h1>
+          <p style={{ 
+            fontSize: '1.2rem', 
+            opacity: 0.9,
+            margin: 0
+          }}>
+            Your gateway to the decentralized world
+          </p>
+        </div>
 
         {/* Features */}
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="grid grid-cols-2 gap-4 mb-8 w-full max-w-sm"
-        >
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: '1rem',
+          width: '100%',
+          maxWidth: '400px',
+          marginBottom: '2rem'
+        }}>
           {features.map((feature, index) => (
-            <motion.div
-              key={feature.title}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.3 + index * 0.1 }}
-              className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center"
+            <div
+              key={index}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                padding: '1rem',
+                borderRadius: '12px',
+                textAlign: 'center'
+              }}
             >
-              <div className="text-white/90 mb-2 flex justify-center">
+              <div style={{ 
+                fontSize: '1.5rem', 
+                marginBottom: '0.5rem' 
+              }}>
                 {feature.icon}
               </div>
-              <h3 className="text-white font-semibold text-sm mb-1">
+              <h3 style={{ 
+                fontSize: '0.9rem', 
+                fontWeight: '600', 
+                marginBottom: '0.25rem',
+                margin: '0 0 0.25rem 0'
+              }}>
                 {feature.title}
               </h3>
-              <p className="text-white/70 text-xs">
+              <p style={{ 
+                fontSize: '0.75rem', 
+                opacity: 0.8,
+                margin: 0
+              }}>
                 {feature.description}
               </p>
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       </div>
 
       {/* Action Buttons */}
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.4 }}
-        className="p-8 space-y-4"
-      >
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+      <div style={{ padding: '2rem' }}>
+        <button
           onClick={() => onNavigate('create')}
-          className="w-full bg-white text-primary-700 font-semibold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center space-x-2"
+          style={{
+            width: '100%',
+            background: 'white',
+            color: '#667eea',
+            fontWeight: '600',
+            padding: '1rem 1.5rem',
+            borderRadius: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            marginBottom: '1rem',
+            fontSize: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem'
+          }}
         >
-          <Wallet className="w-5 h-5" />
-          <span>Create New Wallet</span>
-        </motion.button>
+          <span>🔗</span>
+          Create New Wallet
+        </button>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+        <button
           onClick={() => onNavigate('import')}
-          className="w-full bg-white/10 backdrop-blur-sm text-white font-semibold py-4 px-6 rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 flex items-center justify-center space-x-2"
+          style={{
+            width: '100%',
+            background: 'rgba(255, 255, 255, 0.1)',
+            color: 'white',
+            fontWeight: '600',
+            padding: '1rem 1.5rem',
+            borderRadius: '12px',
+            border: '2px solid rgba(255, 255, 255, 0.2)',
+            cursor: 'pointer',
+            fontSize: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem'
+          }}
         >
-          <Download className="w-5 h-5" />
-          <span>Import Existing Wallet</span>
-        </motion.button>
-      </motion.div>
+          <span>📥</span>
+          Import Existing Wallet
+        </button>
+      </div>
 
       {/* Footer */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.6 }}
-        className="text-center pb-6"
-      >
-        <p className="text-white/60 text-sm">
+      <div style={{
+        textAlign: 'center',
+        paddingBottom: '1.5rem'
+      }}>
+        <p style={{ 
+          fontSize: '0.75rem', 
+          opacity: 0.7,
+          margin: 0
+        }}>
           By continuing, you agree to our Terms of Service and Privacy Policy
         </p>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 };
 
-export default WelcomeScreen; 
+export default WelcomeScreen;
