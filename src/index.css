@@ -1,0 +1,236 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* Custom base styles */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Extension popup specific styles */
+  body.popup {
+    @apply w-[400px] h-[600px] overflow-hidden;
+    min-width: 400px;
+    min-height: 600px;
+  }
+  
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full hover:bg-gray-400 transition-colors;
+  }
+  
+  /* Focus styles */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 focus:ring-primary-500 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500 border border-gray-300;
+  }
+  
+  .btn-ghost {
+    @apply btn text-gray-700 hover:bg-gray-100 focus:ring-gray-500;
+  }
+  
+  .btn-danger {
+    @apply btn bg-gradient-to-r from-error-600 to-error-700 text-white hover:from-error-700 hover:to-error-800 focus:ring-error-500;
+  }
+  
+  .input {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 transition-colors;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  
+  .card-hover {
+    @apply card hover:shadow-md hover:border-gray-300 transition-all duration-200;
+  }
+  
+  .glass {
+    @apply bg-white/80 backdrop-blur-sm border border-white/20;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent;
+  }
+  
+  .loading-spinner {
+    @apply animate-spin rounded-full border-2 border-gray-300 border-t-primary-600;
+  }
+  
+  .fade-in {
+    @apply animate-fade-in;
+  }
+  
+  .slide-up {
+    @apply animate-slide-up;
+  }
+  
+  .scale-in {
+    @apply animate-scale-in;
+  }
+}
+
+/* Custom utility styles */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .backdrop-blur-xs {
+    backdrop-filter: blur(2px);
+  }
+  
+  .shadow-glow {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  
+  .shadow-glow-lg {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.2);
+  }
+}
+
+/* Animation classes */
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-bounce-slow {
+  animation: bounce 2s infinite;
+}
+
+/* Network-specific gradients */
+.gradient-ethereum {
+  background: linear-gradient(135deg, #627eea 0%, #764ba2 100%);
+}
+
+.gradient-bitcoin {
+  background: linear-gradient(135deg, #f7931a 0%, #ff9500 100%);
+}
+
+.gradient-solana {
+  background: linear-gradient(135deg, #9945ff 0%, #14f195 100%);
+}
+
+.gradient-tron {
+  background: linear-gradient(135deg, #ff0000 0%, #ff6b6b 100%);
+}
+
+.gradient-polygon {
+  background: linear-gradient(135deg, #8247e5 0%, #a855f7 100%);
+}
+
+.gradient-bsc {
+  background: linear-gradient(135deg, #f3ba2f 0%, #f7931a 100%);
+}
+
+/* Status indicators */
+.status-connected {
+  @apply bg-success-500;
+}
+
+.status-disconnected {
+  @apply bg-gray-400;
+}
+
+.status-pending {
+  @apply bg-warning-500;
+}
+
+.status-error {
+  @apply bg-error-500;
+}
+
+/* Transaction status colors */
+.tx-success {
+  @apply text-success-600 bg-success-50 border-success-200;
+}
+
+.tx-pending {
+  @apply text-warning-600 bg-warning-50 border-warning-200;
+}
+
+.tx-failed {
+  @apply text-error-600 bg-error-50 border-error-200;
+}
+
+/* Network badges */
+.network-badge {
+  @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
+}
+
+.network-ethereum {
+  @apply network-badge bg-blue-100 text-blue-800;
+}
+
+.network-bitcoin {
+  @apply network-badge bg-orange-100 text-orange-800;
+}
+
+.network-solana {
+  @apply network-badge bg-purple-100 text-purple-800;
+}
+
+.network-tron {
+  @apply network-badge bg-red-100 text-red-800;
+}
+
+.network-polygon {
+  @apply network-badge bg-purple-100 text-purple-800;
+}
+
+.network-bsc {
+  @apply network-badge bg-yellow-100 text-yellow-800;
+} 
