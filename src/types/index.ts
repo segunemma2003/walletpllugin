@@ -223,6 +223,7 @@ export interface WalletContextType {
   deleteWallet: (walletId: string) => Promise<void>;
   updateWallet: (walletId: string, updates: Partial<Wallet>) => Promise<void>;
   addHardwareWallet: (deviceType: 'ledger' | 'trezor') => Promise<void>;
+  clearError: () => void;
 }
 
 export interface ScreenProps {

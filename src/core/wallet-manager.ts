@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { encryptData, decryptData } from '../utils/crypto-utils';
 import { deriveWalletFromSeed, generateHDWallet } from '../utils/key-derivation';
 import { WalletAccount } from '../types';
+import { debug } from '../utils/debug';
 
 // Using WalletAccount from types/index.ts
 
@@ -37,28 +38,45 @@ export class WalletManager {
   private isUnlocked: boolean = false;
 
   constructor() {
-    this.loadWallets();
+    debug.log('🔧 WalletManager: Constructor called');
+    this.loadWallets().then(() => {
+      debug.log('🔧 WalletManager: Initial load completed, wallets count:', this.wallets.length);
+    }).catch((error) => {
+      debug.error('🔧 WalletManager: Initial load failed:', error);
+    });
   }
 
   // Load wallets from storage
   private async loadWallets(): Promise<void> {
+    console.log('🔧 WalletManager: loadWallets called');
     try {
       return new Promise((resolve, reject) => {
-        chrome.storage.local.get(['wallets'], (result) => {
+        console.log('🔧 WalletManager: Getting wallets from chrome.storage.local');
+      chrome.storage.local.get(['wallets'], (result) => {
+          console.log('🔧 WalletManager: Chrome storage callback received');
+          console.log('🔧 WalletManager: chrome.runtime.lastError:', chrome.runtime.lastError);
+          console.log('🔧 WalletManager: result:', result);
+          
           if (chrome.runtime.lastError) {
-            console.error('Chrome storage error:', chrome.runtime.lastError);
+            console.error('🔧 WalletManager: Chrome storage error:', chrome.runtime.lastError);
             reject(chrome.runtime.lastError);
             return;
           }
           
-          if (result.wallets) {
-            this.wallets = result.wallets;
-          }
+      if (result.wallets) {
+            console.log('🔧 WalletManager: Found wallets in storage:', result.wallets.length);
+        this.wallets = result.wallets;
+          } else {
+            console.log('🔧 WalletManager: No wallets found in storage');
+            this.wallets = [];
+      }
+          console.log('🔧 WalletManager: loadWallets resolving');
           resolve();
         });
       });
     } catch (error) {
-      console.error('Failed to load wallets:', error);
+      console.error('🔧 WalletManager: loadWallets caught error:', error);
+      throw error;
     }
   }
 
@@ -545,30 +563,39 @@ export class WalletManager {
 
   // Unlock wallet with password
   async unlockWallet(password: string): Promise<boolean> {
+    console.log('🔧 WalletManager: unlockWallet called with password length:', password?.length || 0);
     try {
       // Verify password by trying to decrypt stored data
       const walletData = await chrome.storage.local.get(['encryptedSeed', 'passwordHash']);
+      console.log('🔧 WalletManager: Retrieved wallet data from storage:', {
+        hasEncryptedSeed: !!walletData.encryptedSeed,
+        hasPasswordHash: !!walletData.passwordHash
+      });
       
       if (!walletData.encryptedSeed || !walletData.passwordHash) {
+        console.log('🔧 WalletManager: No encrypted seed or password hash found, returning false');
         return false;
       }
 
       // Verify password hash
       const isValidPassword = await this.verifyPassword(password, walletData.passwordHash);
+      console.log('🔧 WalletManager: Password validation result:', isValidPassword);
       if (!isValidPassword) {
+        console.log('🔧 WalletManager: Invalid password, returning false');
         return false;
       }
 
       // Try to decrypt the seed to verify
       const decryptedSeed = await decryptData(walletData.encryptedSeed, password);
       if (decryptedSeed) {
-        // this.isUnlocked = true; // This line was not in the original file, so it's not added.
+        console.log('🔧 WalletManager: Successfully decrypted seed, returning true');
         return true;
       }
 
+      console.log('🔧 WalletManager: Failed to decrypt seed, returning false');
       return false;
     } catch (error) {
-      console.error('Error unlocking wallet:', error);
+      console.error('🔧 WalletManager: Error in unlockWallet:', error);
       return false;
     }
   }
@@ -625,4 +652,7 @@ export class WalletManager {
       return null;
     }
   }
-} 
+}
+
+// Export a singleton instance
+export const walletManager = new WalletManager(); 

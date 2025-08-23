@@ -4,6 +4,7 @@ import { NetworkManager } from '../core/network-manager';
 import { Wallet, WalletState, WalletContextType, Network } from '../types';
 import { encryptData, validateBIP39SeedPhrase } from '../utils/crypto-utils';
 import { autoLockManager } from '../utils/auto-lock';
+import { debug } from '../utils/debug';
 
 interface WalletStateExtended extends WalletState {
   wallet?: Wallet | null;
@@ -42,11 +43,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Initialize wallet
   const initializeWallet = async () => {
-    console.log('Initializing wallet...');
+    debug.log('Initializing wallet...');
     setState(prev => ({ ...prev, isInitializing: true }));
     try {
       const walletDataList = await walletManager.getWallets();
-      console.log('Loaded wallets:', walletDataList);
+      debug.log('Loaded wallets:', walletDataList);
       const hasWallet = walletDataList.length > 0;
       
       // Convert WalletData to Wallet format
@@ -75,9 +76,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         isInitializing: false,
         isWalletCreated: hasWallet
       }));
-      console.log('Wallet initialization completed successfully');
+      debug.log('Wallet initialization completed successfully');
     } catch (error) {
-      console.error('Wallet initialization error:', error);
+      debug.error('Wallet initialization error:', error);
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to initialize wallet',
@@ -88,9 +89,12 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Unlock wallet
   const unlockWallet = async (password: string): Promise<void> => {
+    debug.log('🔍 WalletContext: unlockWallet called with password length:', password?.length || 0);
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const success = await walletManager.unlockWallet(password);
+      debug.log('🔍 WalletContext: unlockWallet result:', success);
+      
       if (success) {
         const currentWalletData = await walletManager.getCurrentWallet();
         const currentNetwork = await networkManager.getCurrentNetwork();
@@ -132,13 +136,26 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         });
         autoLockManager.start();
       } else {
-        setState(prev => ({
-          ...prev,
-          error: 'Invalid password',
-          isLoading: false
-        }));
+        // Check if there are any wallets to unlock
+        const wallets = await walletManager.getWallets();
+        if (wallets.length === 0) {
+          debug.log('🔍 WalletContext: No wallets found to unlock');
+          setState(prev => ({
+            ...prev,
+            error: 'No wallet found. Please create or import a wallet first.',
+            isLoading: false
+          }));
+        } else {
+          debug.log('🔍 WalletContext: Wallet exists but password is invalid');
+          setState(prev => ({
+            ...prev,
+            error: 'Invalid password',
+            isLoading: false
+          }));
+        }
       }
     } catch (error) {
+      debug.error('🔍 WalletContext: unlockWallet error:', error);
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to unlock wallet',
@@ -243,21 +260,21 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Import wallet
   const importWallet = useCallback(async (seedPhrase: string, password: string): Promise<void> => {
-    console.log('🔄 Starting wallet import process...');
-    console.log('📝 Seed phrase length:', seedPhrase.split(' ').length);
-    console.log('🔐 Password provided:', !!password);
+    debug.log('🔄 Starting wallet import process...');
+    debug.log('📝 Seed phrase length:', seedPhrase.split(' ').length);
+    debug.log('🔐 Password provided:', !!password);
     
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       // Validate seed phrase first
-      console.log('✅ Validating seed phrase...');
+      debug.log('✅ Validating seed phrase...');
       if (!validateBIP39SeedPhrase(seedPhrase)) {
         throw new Error('Invalid seed phrase');
       }
-      console.log('✅ Seed phrase validation passed');
+      debug.log('✅ Seed phrase validation passed');
 
       const encryptedSeed = await encryptData(seedPhrase, password);
-      console.log('🔐 Seed phrase encrypted successfully');
+      debug.log('🔐 Seed phrase encrypted successfully');
       
       const wallet: Wallet = {
         id: Date.now().toString(),
@@ -275,7 +292,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       };
 
       // Call walletManager with proper request format
-      console.log('📞 Calling walletManager.importWallet...');
+      debug.log('📞 Calling walletManager.importWallet...');
       const walletData = await walletManager.importWallet({
         seedPhrase: seedPhrase,
         password: password,
@@ -283,14 +300,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         network: 'ethereum',
         accountCount: 1
       });
-      console.log('✅ WalletManager returned wallet data:', walletData);
+      debug.log('✅ WalletManager returned wallet data:', walletData);
       
       // Convert WalletData to Wallet format
       const primaryAccount = walletData.accounts[0];
       if (!primaryAccount) {
         throw new Error('No accounts derived from seed phrase');
       }
-      console.log('✅ Primary account derived:', primaryAccount);
+      debug.log('✅ Primary account derived:', primaryAccount);
       
       const convertedWallet: Wallet = {
         id: walletData.id,
@@ -306,7 +323,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         createdAt: new Date(walletData.createdAt),
         updatedAt: new Date(walletData.lastAccessed)
       };
-      console.log('✅ Converted wallet object:', convertedWallet);
+      debug.log('✅ Converted wallet object:', convertedWallet);
       
       setState(prev => ({
         ...prev,
@@ -317,10 +334,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         isWalletCreated: true,
         isLoading: false
       }));
-      console.log('✅ Wallet state updated successfully');
-      console.log('🎉 Wallet import completed successfully!');
+      debug.log('✅ Wallet state updated successfully');
+      debug.log('🎉 Wallet import completed successfully!');
     } catch (error) {
-      console.error('❌ Wallet import failed:', error);
+      debug.error('❌ Wallet import failed:', error);
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to import wallet',
@@ -463,13 +480,18 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  // Clear error
+  const clearError = () => {
+    setState(prev => ({ ...prev, error: null }));
+  };
+
   // Get networks
   const getNetworks = async () => {
     try {
       const networks = await networkManager.getNetworks();
       setState(prev => ({ ...prev, networks }));
     } catch (error) {
-      console.error('Failed to get networks:', error);
+      debug.error('Failed to get networks:', error);
     }
   };
 
@@ -482,7 +504,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         balances: { ...prev.balances, [`${address}-${network}`]: balance }
       }));
     } catch (error) {
-      console.error('Failed to get balance:', error);
+      debug.error('Failed to get balance:', error);
     }
   };
 
@@ -492,7 +514,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const currentNetwork = await networkManager.getCurrentNetwork();
       setState(prev => ({ ...prev, currentNetwork }));
     } catch (error) {
-      console.error('Failed to get current network:', error);
+      debug.error('Failed to get current network:', error);
     }
   };
 
@@ -502,7 +524,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await initializeWallet();
         await getNetworks();
       } catch (error) {
-        console.error('Failed to initialize wallet:', error);
+        debug.error('Failed to initialize wallet:', error);
         setState(prev => ({
           ...prev,
           error: 'Failed to initialize wallet',
@@ -526,7 +548,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     switchWallet,
     deleteWallet,
     updateWallet,
-    addHardwareWallet
+    addHardwareWallet,
+    clearError
   };
 
   return (
