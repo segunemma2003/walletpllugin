@@ -47,30 +47,38 @@ const PopupContent: React.FC = () => {
 
   // Check for verified seed phrase and create wallet if needed
   useEffect(() => {
+    console.log('🔍 App.tsx: Checking for verified seed phrase...');
+    console.log('🔍 App.tsx: currentScreen:', currentScreen);
+    console.log('🔍 App.tsx: currentWallet:', currentWallet);
+    console.log('🔍 App.tsx: isCreatingWalletRef.current:', isCreatingWalletRef.current);
+    
     const verifiedSeedPhrase = localStorage.getItem('verifiedSeedPhrase');
+    console.log('🔍 App.tsx: verifiedSeedPhrase exists:', !!verifiedSeedPhrase);
+    
     if (verifiedSeedPhrase && !currentWallet && currentScreen === 'dashboard' && !isCreatingWalletRef.current) {
+      console.log('✅ App.tsx: Conditions met, starting wallet creation...');
       // Create wallet from verified seed phrase
       const createWalletFromVerifiedSeed = async () => {
         isCreatingWalletRef.current = true;
         try {
           // Generate a secure password based on the seed phrase
           const securePassword = btoa(verifiedSeedPhrase).substring(0, 16);
-          console.log('Creating wallet from verified seed phrase...');
+          console.log('🔄 App.tsx: Creating wallet from verified seed phrase...');
           await walletData.importWallet(verifiedSeedPhrase, securePassword);
           localStorage.removeItem('verifiedSeedPhrase');
-          console.log('Wallet created successfully!');
+          console.log('✅ App.tsx: Wallet created successfully!');
           toast.success('Wallet created successfully!');
           
           // Auto-unlock the wallet after creation
           try {
             await walletData.unlockWallet(securePassword);
-            console.log('Wallet unlocked successfully!');
+            console.log('✅ App.tsx: Wallet unlocked successfully!');
           } catch (unlockError) {
-            console.error('Failed to auto-unlock wallet:', unlockError);
+            console.error('❌ App.tsx: Failed to auto-unlock wallet:', unlockError);
             // Don't throw here, just log the error
           }
         } catch (error) {
-          console.error('Failed to create wallet from verified seed:', error);
+          console.error('❌ App.tsx: Failed to create wallet from verified seed:', error);
           toast.error('Failed to create wallet. Please try again.');
           setCurrentScreen('welcome');
         } finally {
@@ -78,6 +86,12 @@ const PopupContent: React.FC = () => {
         }
       };
       createWalletFromVerifiedSeed();
+    } else {
+      console.log('❌ App.tsx: Conditions not met for wallet creation');
+      console.log('❌ App.tsx: verifiedSeedPhrase:', !!verifiedSeedPhrase);
+      console.log('❌ App.tsx: !currentWallet:', !currentWallet);
+      console.log('❌ App.tsx: currentScreen === dashboard:', currentScreen === 'dashboard');
+      console.log('❌ App.tsx: !isCreatingWalletRef.current:', !isCreatingWalletRef.current);
     }
   }, [currentWallet, currentScreen]);
 
@@ -110,6 +124,11 @@ const PopupContent: React.FC = () => {
 
   // Show wallet creation/import/verify screens if no wallet exists or wallet is not unlocked
   if (!currentWallet || !isUnlocked) {
+    console.log('🔍 App.tsx: No wallet or not unlocked, showing auth screens');
+    console.log('🔍 App.tsx: currentScreen:', currentScreen);
+    console.log('🔍 App.tsx: !currentWallet:', !currentWallet);
+    console.log('🔍 App.tsx: !isUnlocked:', !isUnlocked);
+    
     switch (currentScreen) {
       case 'create':
         return <CreateWalletScreen {...screenProps} />;
@@ -117,10 +136,19 @@ const PopupContent: React.FC = () => {
         return <ImportWalletScreen {...screenProps} />;
       case 'verify':
         return <VerifySeedScreen {...screenProps} />;
-      case 'dashboard':
-        // If navigating to dashboard but no wallet exists, show welcome
-        return <WelcomeScreen {...screenProps} />;
+      case 'dashboard': {
+        // Check if there's a verified seed phrase - if so, allow dashboard to show for wallet creation
+        const verifiedSeedPhrase = localStorage.getItem('verifiedSeedPhrase');
+        if (verifiedSeedPhrase) {
+          console.log('🔍 App.tsx: Found verified seed phrase, allowing dashboard for wallet creation');
+          return <DashboardScreen {...screenProps} />;
+        } else {
+          console.log('🔍 App.tsx: No verified seed phrase, redirecting to welcome');
+          return <WelcomeScreen {...screenProps} />;
+        }
+      }
       default:
+        console.log('🔍 App.tsx: Default case, showing welcome screen');
         return <WelcomeScreen {...screenProps} />;
     }
   }
