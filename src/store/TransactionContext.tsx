@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
 interface Transaction {
   id: string;
@@ -148,7 +148,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   // Refresh transactions
-  const refreshTransactions = async () => {
+  const refreshTransactions = useCallback(async () => {
     setTransactionState(prev => ({
       ...prev,
       isLoading: true,
@@ -156,22 +156,29 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }));
 
     try {
-      // In a real implementation, you would fetch transaction status from blockchain
+      // REAL blockchain integration - check transaction status
       const allTransactions = [
         ...transactionState.recentTransactions,
         ...transactionState.pendingTransactions
       ];
 
-      // Simulate checking transaction status
-      const updatedTransactions = allTransactions.map(tx => {
-        if (tx.status === 'pending') {
-          // Simulate some transactions being confirmed
-          if (Math.random() > 0.7) {
-            return { ...tx, status: 'confirmed' as const };
+      // Use real blockchain integration to check transaction status
+      const { getTransactionStatus } = await import('../utils/blockchain-utils');
+      
+      const updatedTransactions = await Promise.all(
+        allTransactions.map(async (tx) => {
+          if (tx.status === 'pending') {
+            try {
+              const status = await getTransactionStatus(tx.hash);
+              return { ...tx, status: status as 'pending' | 'confirmed' | 'failed' };
+            } catch (error) {
+              console.warn(`Failed to check status for tx ${tx.hash}:`, error);
+              return tx; // Keep original status if check fails
+            }
           }
-        }
-        return tx;
-      });
+          return tx;
+        })
+      );
 
       const pending = updatedTransactions.filter(tx => tx.status === 'pending');
       const recent = updatedTransactions
@@ -194,7 +201,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         error: error instanceof Error ? error.message : 'Failed to refresh transactions'
       }));
     }
-  };
+  }, []);
 
   const value: TransactionContextType = {
     transactionState: transactionState,

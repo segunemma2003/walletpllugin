@@ -367,14 +367,14 @@ export class TransactionManager {
       const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
       
       // Get wallet address for estimation
-      const walletData = await this.getWalletFromStorage();
-      if (!walletData?.address) {
+      const wallet = await this.getWalletFromStorage();
+      if (!wallet?.address) {
         throw new Error('No wallet found');
       }
 
       // Estimate gas
       const estimatedGas = await estimateGas(
-        walletData.address,
+        wallet.address,
         to,
         value,
         data,

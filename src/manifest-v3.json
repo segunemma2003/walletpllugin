@@ -42,6 +42,8 @@
     {
       "resources": [
         "injected.js",
+        "process-polyfill.js",
+        "error-handler.js",
         "assets/*"
       ],
       "matches": [

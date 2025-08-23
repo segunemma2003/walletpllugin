@@ -1,150 +1,130 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PayCio Wallet</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      margin: 0;
-      padding: 0;
-      width: 400px;
-      height: 600px;
-      overflow: hidden;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f8fafc;
-    }
-    
-    #root {
-      width: 100%;
-      height: 100%;
-    }
-    
-    /* Loading fallback */
-    .loading-fallback {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      flex-direction: column;
-    }
-    
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid rgba(255, 255, 255, 0.3);
-      border-top: 4px solid white;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 1rem;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    
-    /* Error fallback */
-    .error-fallback {
-      display: none;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background: #fee2e2;
-      color: #dc2626;
-      flex-direction: column;
-      text-align: center;
-      padding: 2rem;
-    }
-    
-    .error-fallback.show {
-      display: flex;
-    }
-    
-    .error-title {
-      font-size: 1.5rem;
-      font-weight: bold;
-      margin-bottom: 0.5rem;
-    }
-    
-    .error-message {
-      margin-bottom: 1rem;
-    }
-    
-    .retry-button {
-      padding: 0.5rem 1rem;
-      background: #dc2626;
-      color: white;
-      border: none;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    
-    .retry-button:hover {
-      background: #b91c1c;
-    }
-  </style>
-</head>
-<body>
-  <div id="root">
-    <!-- Loading fallback -->
-    <div class="loading-fallback" id="loading-fallback">
-      <div class="spinner"></div>
-      <div>Loading PayCio Wallet...</div>
-    </div>
-    
-    <!-- Error fallback -->
-    <div class="error-fallback" id="error-fallback">
-      <div class="error-title">Oops! Something went wrong</div>
-      <div class="error-message" id="error-message">Failed to load the wallet extension</div>
-      <button class="retry-button" onclick="window.location.reload()">Try Again</button>
-    </div>
-  </div>
-
-  <script>
-    // Error handling
-    window.addEventListener('error', function(event) {
-      console.error('Global error:', event.error);
-      showError('Script error: ' + event.error?.message);
-    });
-
-    window.addEventListener('unhandledrejection', function(event) {
-      console.error('Unhandled rejection:', event.reason);
-      showError('Promise rejection: ' + event.reason?.message);
-    });
-
-    function showError(message) {
-      const loadingEl = document.getElementById('loading-fallback');
-      const errorEl = document.getElementById('error-fallback');
-      const messageEl = document.getElementById('error-message');
-      
-      if (loadingEl) loadingEl.style.display = 'none';
-      if (errorEl) {
-        errorEl.classList.add('show');
-        if (messageEl) messageEl.textContent = message;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PayCio Wallet</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
       }
-    }
 
-    // Hide loading after React loads
-    function hideLoading() {
-      const loadingEl = document.getElementById('loading-fallback');
-      if (loadingEl) {
-        loadingEl.style.display = 'none';
+      body {
+        margin: 0;
+        padding: 0;
+        width: 400px;
+        height: 600px;
+        overflow: hidden;
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        background: #f8fafc;
       }
-    }
 
-    // Export for React to use
-    window.hideLoading = hideLoading;
-    window.showError = showError;
-  </script>
-</body>
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Loading fallback */
+      .loading-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        flex-direction: column;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 1rem;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Error fallback */
+      .error-fallback {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #fee2e2;
+        color: #dc2626;
+        flex-direction: column;
+        text-align: center;
+        padding: 2rem;
+      }
+
+      .error-fallback.show {
+        display: flex;
+      }
+
+      .error-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+      }
+
+      .error-message {
+        margin-bottom: 1rem;
+      }
+
+      .retry-button {
+        padding: 0.5rem 1rem;
+        background: #dc2626;
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .retry-button:hover {
+        background: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Loading fallback -->
+      <div class="loading-fallback" id="loading-fallback">
+        <div class="spinner"></div>
+        <div>Loading PayCio Wallet...</div>
+      </div>
+
+      <!-- Error fallback -->
+      <div class="error-fallback" id="error-fallback">
+        <div class="error-title">Oops! Something went wrong</div>
+        <div class="error-message" id="error-message">
+          Failed to load the wallet extension
+        </div>
+        <button class="retry-button" onclick="window.location.reload()">
+          Try Again
+        </button>
+      </div>
+    </div>
+
+      <script src="process-polyfill.js"></script>
+  <script src="error-handler.js"></script>
+  </body>
 </html>

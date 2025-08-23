@@ -1,19 +1,10 @@
 import * as bip39 from 'bip39';
 import { ethers } from 'ethers';
 import { encryptData, decryptData } from '../utils/crypto-utils';
-import { deriveWalletFromSeed } from '../utils/key-derivation';
+import { deriveWalletFromSeed, generateHDWallet } from '../utils/key-derivation';
+import { WalletAccount } from '../types';
 
-export interface WalletAccount {
-  id: string;
-  address: string;
-  privateKey: string;
-  publicKey: string;
-  derivationPath: string;
-  network: string;
-  balance: string;
-  nonce: number;
-  createdAt: number;
-}
+// Using WalletAccount from types/index.ts
 
 export interface WalletData {
   id: string;
@@ -43,6 +34,7 @@ export interface ImportWalletRequest {
 
 export class WalletManager {
   private wallets: WalletData[] = [];
+  private isUnlocked: boolean = false;
 
   constructor() {
     this.loadWallets();
@@ -51,10 +43,19 @@ export class WalletManager {
   // Load wallets from storage
   private async loadWallets(): Promise<void> {
     try {
-      chrome.storage.local.get(['wallets'], (result) => {
-      if (result.wallets) {
-        this.wallets = result.wallets;
-      }
+      return new Promise((resolve, reject) => {
+        chrome.storage.local.get(['wallets'], (result) => {
+          if (chrome.runtime.lastError) {
+            console.error('Chrome storage error:', chrome.runtime.lastError);
+            reject(chrome.runtime.lastError);
+            return;
+          }
+          
+          if (result.wallets) {
+            this.wallets = result.wallets;
+          }
+          resolve();
+        });
       });
     } catch (error) {
       console.error('Failed to load wallets:', error);
@@ -63,10 +64,24 @@ export class WalletManager {
 
   // Save wallets to storage
   private async saveWallets(): Promise<void> {
+    console.log('💾 WalletManager: Starting to save wallets to storage...');
+    console.log('📊 WalletManager: Total wallets to save:', this.wallets.length);
+    
     try {
-      chrome.storage.local.set({ wallets: this.wallets });
+      return new Promise((resolve, reject) => {
+        chrome.storage.local.set({ wallets: this.wallets }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('❌ WalletManager: Chrome storage error:', chrome.runtime.lastError);
+            reject(chrome.runtime.lastError);
+            return;
+          }
+          console.log('✅ WalletManager: Wallets saved to storage successfully');
+          resolve();
+        });
+      });
     } catch (error) {
-      console.error('Failed to save wallets:', error);
+      console.error('❌ WalletManager: Failed to save wallets:', error);
+      throw error;
     }
   }
 
@@ -117,17 +132,32 @@ export class WalletManager {
 
   // Import wallet from seed phrase
   async importWallet(request: ImportWalletRequest): Promise<WalletData> {
+    console.log('🔄 WalletManager: Starting import wallet process...');
+    console.log('📝 WalletManager: Request received:', { 
+      name: request.name, 
+      network: request.network, 
+      accountCount: request.accountCount,
+      seedPhraseLength: request.seedPhrase.split(' ').length 
+    });
+    
     try {
       // Validate seed phrase
+      console.log('✅ WalletManager: Validating seed phrase...');
       if (!this.validateSeedPhrase(request.seedPhrase)) {
+        console.error('❌ WalletManager: Invalid seed phrase');
         throw new Error('Invalid seed phrase');
       }
+      console.log('✅ WalletManager: Seed phrase validation passed');
 
       // Encrypt seed phrase
+      console.log('🔐 WalletManager: Encrypting seed phrase...');
       const encryptedSeedPhrase = await encryptData(request.seedPhrase, request.password);
+      console.log('✅ WalletManager: Seed phrase encrypted successfully');
       
       // Derive wallet accounts
+      console.log('🔑 WalletManager: Deriving wallet accounts...');
       const accounts = await this.deriveAccounts(request.seedPhrase, request.network, request.accountCount || 1);
+      console.log('✅ WalletManager: Accounts derived:', accounts.length, 'accounts');
       
       const wallet: WalletData = {
         id: Date.now().toString(),
@@ -139,44 +169,68 @@ export class WalletManager {
         createdAt: Date.now(),
         lastAccessed: Date.now()
     };
+    console.log('✅ WalletManager: Wallet object created:', {
+      id: wallet.id,
+      name: wallet.name,
+      network: wallet.network,
+      accountCount: wallet.accounts.length,
+      primaryAddress: wallet.accounts[0]?.address
+    });
 
+    console.log('💾 WalletManager: Saving wallet to storage...');
     this.wallets.push(wallet);
     await this.saveWallets();
+    console.log('✅ WalletManager: Wallet saved to storage successfully');
+    console.log('🎉 WalletManager: Wallet import completed successfully!');
 
     return wallet;
     } catch (error) {
-      console.error('Failed to import wallet:', error);
+      console.error('❌ WalletManager: Failed to import wallet:', error);
       throw error;
     }
   }
 
   // Derive accounts from seed phrase
   private async deriveAccounts(seedPhrase: string, network: string, count: number): Promise<WalletAccount[]> {
+    console.log('🔑 WalletManager: Starting account derivation...');
+    console.log('📝 WalletManager: Deriving', count, 'accounts for network:', network);
+    
     const accounts: WalletAccount[] = [];
     
     for (let i = 0; i < count; i++) {
       try {
         const derivationPath = `m/44'/60'/0'/0/${i}`; // BIP44 path for Ethereum
-        const walletData = await deriveWalletFromSeed(seedPhrase, derivationPath);
+        console.log('🔄 WalletManager: Deriving account', i, 'with path:', derivationPath);
+        
+        const derivedWallet = await deriveWalletFromSeed(seedPhrase, derivationPath);
+        console.log('✅ WalletManager: Account', i, 'derived successfully:', {
+          address: derivedWallet.address,
+          hasPrivateKey: !!derivedWallet.privateKey,
+          hasPublicKey: !!derivedWallet.publicKey
+        });
         
         const account: WalletAccount = {
           id: `${Date.now()}-${i}`,
-          address: walletData.address,
-          privateKey: walletData.privateKey,
-          publicKey: walletData.publicKey,
+          name: `Account ${i + 1}`,
+          address: derivedWallet.address,
+          privateKey: derivedWallet.privateKey,
+          publicKey: derivedWallet.publicKey,
           derivationPath: derivationPath,
           network: network,
           balance: '0',
+          isActive: i === 0, // First account is active by default
           nonce: 0,
       createdAt: Date.now()
     };
 
         accounts.push(account);
+        console.log('✅ WalletManager: Account', i, 'added to accounts array');
       } catch (error) {
-        console.error(`Failed to derive account ${i}:`, error);
+        console.error(`❌ WalletManager: Failed to derive account ${i}:`, error);
       }
     }
     
+    console.log('🎉 WalletManager: Account derivation completed. Total accounts:', accounts.length);
     return accounts;
   }
 
@@ -230,12 +284,14 @@ export class WalletManager {
     
     const newAccount: WalletAccount = {
       id: `${Date.now()}-${newAccountIndex}`,
+      name: `Account ${newAccountIndex + 1}`,
       address: walletData.address,
       privateKey: walletData.privateKey,
       publicKey: walletData.publicKey,
       derivationPath: derivationPath,
       network: wallet.network,
       balance: '0',
+      isActive: false, // New accounts are not active by default
       nonce: 0,
       createdAt: Date.now()
     };
@@ -344,7 +400,7 @@ export class WalletManager {
     try {
       const seedPhrase = await decryptData(wallet.encryptedSeedPhrase, password);
       return !!seedPhrase;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -471,8 +527,16 @@ export class WalletManager {
   // Get all wallets (alias for getWallet)
   async getWallets(): Promise<WalletData[]> {
     try {
-      const walletData = await chrome.storage.local.get('wallets');
-      return walletData.wallets || [];
+      return new Promise((resolve, reject) => {
+        chrome.storage.local.get(['wallets'], (result) => {
+          if (chrome.runtime.lastError) {
+            console.error('Chrome storage error:', chrome.runtime.lastError);
+            reject(chrome.runtime.lastError);
+            return;
+          }
+          resolve(result.wallets || []);
+        });
+      });
     } catch (error) {
       console.error('Error getting wallets:', error);
       return [];

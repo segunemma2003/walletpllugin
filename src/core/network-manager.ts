@@ -1,71 +1,13 @@
-import { getBalance, getGasPrice, estimateGas, NETWORKS } from '../utils/web3-utils';
-
-export interface Network {
-  id: string;
-  name: string;
-  symbol: string;
-  rpcUrl: string;
-  chainId: string;
-  explorerUrl: string;
-  isCustom: boolean;
-  isEnabled: boolean;
-}
+import { getBalance as getBalanceFromUtils, getGasPrice as getGasPriceFromUtils, estimateGas as estimateGasFromUtils, NETWORKS } from '../utils/web3-utils';
+import { Network } from '../types';
 
 export class NetworkManager {
-  private networks: Network[] = [
-    {
-      id: 'ethereum',
-      isCustom: false,
-      isEnabled: true,
-      name: 'Ethereum',
-      symbol: 'ETH',
-      chainId: '1',
-      rpcUrl: `https://mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,
-      explorerUrl: 'https://api.etherscan.io/api',
-      apiKey: process.env.ETHERSCAN_API_KEY || '',
-      nativeCurrency: {
-        name: 'Ether',
-        symbol: 'ETH',
-        decimals: 18
-      }
-    },
-    {
-      id: 'polygon',
-      isCustom: false,
-      isEnabled: true,
-      name: 'Polygon',
-      symbol: 'MATIC',
-      chainId: '137',
-      rpcUrl: 'https://polygon-rpc.com',
-      explorerUrl: 'https://api.polygonscan.com/api',
-      apiKey: process.env.POLYGONSCAN_API_KEY || '',
-      nativeCurrency: {
-        name: 'MATIC',
-        symbol: 'MATIC',
-        decimals: 18
-      }
-    },
-    {
-      id: 'bsc',
-      isCustom: false,
-      isEnabled: true,
-      name: 'BNB Smart Chain',
-      symbol: 'BNB',
-      chainId: '56',
-      rpcUrl: 'https://bsc-dataseed.binance.org',
-      explorerUrl: 'https://api.bscscan.com/api',
-      apiKey: process.env.BSCSCAN_API_KEY || '',
-      nativeCurrency: {
-        name: 'BNB',
-        symbol: 'BNB',
-        decimals: 18
-      }
-    }
-  ];
+  private networks: Network[] = [];
   private currentNetwork: Network | null = null;
 
   constructor() {
-    this.networks = Object.values(NETWORKS).map(network => ({
+    this.networks = Object.entries(NETWORKS).map(([id, network]) => ({
+      id,
       ...network,
       isCustom: false,
       isEnabled: true
@@ -103,7 +45,8 @@ export class NetworkManager {
 
   // Get default networks
   getDefaultNetworks(): Network[] {
-    return Object.values(NETWORKS).map(network => ({
+    return Object.entries(NETWORKS).map(([id, network]) => ({
+      id,
       ...network,
       isCustom: false,
       isEnabled: true
@@ -188,7 +131,7 @@ export class NetworkManager {
   // Get balance
   async getBalance(address: string, network: string): Promise<string> {
     try {
-      return await getBalance(address, network);
+      return await getBalanceFromUtils(address, network);
     } catch (error) {
       console.error('Error getting balance:', error);
       return '0x0';
@@ -198,7 +141,7 @@ export class NetworkManager {
   // Get gas price
   async getGasPrice(network: string): Promise<string> {
     try {
-      return await getGasPrice(network);
+      return await getGasPriceFromUtils(network);
     } catch (error) {
       console.error('Error getting gas price:', error);
       return '0x0';
@@ -206,9 +149,9 @@ export class NetworkManager {
   }
 
   // Estimate gas
-  async estimateGas(transaction: any, network: string): Promise<string> {
+  async estimateGas(from: string, to: string, value: string, txData: string = '0x', network: string): Promise<string> {
     try {
-      return await estimateGas(transaction, network);
+      return await estimateGasFromUtils(from, to, value, txData, network);
     } catch (error) {
       console.error('Error estimating gas:', error);
       return '0x5208'; // Default gas limit

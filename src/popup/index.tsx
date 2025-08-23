@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from '../App';
+import PopupApp from './App';
 import '../index.css';
 
 console.log('PayCio Wallet starting...');
@@ -81,7 +81,7 @@ function initializeApp() {
     root.render(
       <React.StrictMode>
         <ErrorBoundary>
-          <App />
+          <PopupApp />
         </ErrorBoundary>
       </React.StrictMode>
     );

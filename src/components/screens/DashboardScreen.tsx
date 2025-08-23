@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useWallet } from '../../store/WalletContext';
 import { usePortfolio } from '../../store/PortfolioContext';
 import { useTransactions } from '../../store/TransactionContext';
-import { ScreenProps } from '../../types';
 import { 
   ArrowUpIcon, 
   ArrowDownIcon, 
   QrCodeIcon,
   Cog6ToothIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  WalletIcon,
+  ChartBarIcon,
+  ClockIcon,
+  EyeIcon,
+  EyeSlashIcon
 } from '@heroicons/react/24/outline';
+import { ScreenProps } from '../../types';
 
 interface DashboardScreenProps extends ScreenProps {}
 
@@ -18,6 +24,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate, currentSc
   const { portfolioData, refreshPortfolio } = usePortfolio();
   const { recentTransactions, refreshTransactions } = useTransactions();
   const [isLoading, setIsLoading] = useState(false);
+  const [showBalance, setShowBalance] = useState(true);
 
   useEffect(() => {
     if (isUnlocked && currentWallet) {
@@ -33,132 +40,189 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate, currentSc
 
   if (!currentWallet || !isUnlocked) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p>Loading wallet...</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto mb-6"></div>
+          <p className="text-white text-lg">Loading wallet...</p>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between p-6 border-b border-white/10"
+      >
+        <div className="flex items-center space-x-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center">
+            <WalletIcon className="w-6 h-6 text-white" />
+          </div>
         <div>
-          <h1 className="text-2xl font-bold">PayCio Wallet</h1>
-          <p className="text-gray-400 text-sm">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
+              PayCio Wallet
+            </h1>
+            <p className="text-purple-300 text-sm">
             {currentWallet.address.slice(0, 6)}...{currentWallet.address.slice(-4)}
           </p>
+          </div>
         </div>
-        <div className="flex space-x-2">
-          <button
+        <div className="flex space-x-3">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleSecurity}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+            className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all duration-300 border border-white/20"
           >
             <ShieldCheckIcon className="w-5 h-5" />
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleSettings}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+            className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all duration-300 border border-white/20"
           >
             <Cog6ToothIcon className="w-5 h-5" />
-          </button>
+          </motion.button>
         </div>
+      </motion.div>
+
+      <div className="p-6 space-y-6">
+        {/* Portfolio Summary */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg rounded-3xl p-6 border border-white/20"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Portfolio Value</h2>
+            <button
+              onClick={() => setShowBalance(!showBalance)}
+              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              {showBalance ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+            </button>
       </div>
 
-      {/* Portfolio Summary */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-2">Portfolio Value</h2>
-        <div className="text-3xl font-bold mb-2">
-          ${portfolioData?.totalValueUSD || '0.00'}
+          <div className="text-4xl font-bold mb-3">
+            {showBalance ? `$${portfolioData?.totalValueUSD || '0.00'}` : '••••••'}
         </div>
+          
         <div className={`flex items-center text-sm ${
           portfolioData?.change24hPercent && portfolioData.change24hPercent >= 0 
             ? 'text-green-400' 
             : 'text-red-400'
         }`}>
           {portfolioData?.change24hPercent && portfolioData.change24hPercent >= 0 ? (
-            <ArrowUpIcon className="w-4 h-4 mr-1" />
+              <ArrowUpIcon className="w-4 h-4 mr-2" />
           ) : (
-            <ArrowDownIcon className="w-4 h-4 mr-1" />
+              <ArrowDownIcon className="w-4 h-4 mr-2" />
           )}
           {portfolioData?.change24hPercent ? `${Math.abs(portfolioData.change24hPercent).toFixed(2)}%` : '0.00%'} (24h)
         </div>
-      </div>
+        </motion.div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <button
-          onClick={handleSend}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="grid grid-cols-2 gap-4"
         >
-          <ArrowUpIcon className="w-5 h-5 mr-2" />
-          Send
-        </button>
-        <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleSend}
+            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-300 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl"
+          >
+            <ArrowUpIcon className="w-6 h-6" />
+            <span>Send</span>
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           onClick={handleReceive}
-          className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
-        >
-          <ArrowDownIcon className="w-5 h-5 mr-2" />
-          Receive
-        </button>
-      </div>
+            className="bg-white/10 hover:bg-white/20 text-white font-semibold py-4 px-6 rounded-2xl border border-white/20 hover:border-white/40 transition-all duration-300 flex items-center justify-center space-x-3"
+          >
+            <QrCodeIcon className="w-6 h-6" />
+            <span>Receive</span>
+          </motion.button>
+        </motion.div>
 
-      {/* Recent Transactions */}
-      <div className="bg-gray-800 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Recent Transactions</h3>
+        {/* Recent Transactions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white/5 backdrop-blur-lg rounded-3xl p-6 border border-white/10"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-white flex items-center">
+              <ClockIcon className="w-5 h-5 mr-2" />
+              Recent Transactions
+            </h3>
           <button
             onClick={() => onNavigate('transactions')}
-            className="text-blue-400 hover:text-blue-300 text-sm"
+              className="text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors"
           >
             View All
           </button>
         </div>
         
-        {recentTransactions.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            <QrCodeIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No transactions yet</p>
-            <p className="text-sm">Your transaction history will appear here</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {recentTransactions.slice(0, 5).map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-                <div className="flex items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                    tx.type === 'send' ? 'bg-red-500' : 'bg-green-500'
+          {recentTransactions && recentTransactions.length > 0 ? (
+            <div className="space-y-4">
+              {recentTransactions.slice(0, 3).map((tx, index) => (
+                <motion.div
+                  key={tx.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + index * 0.1 }}
+                  className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      tx.type === 'send' ? 'bg-red-500/20' : 'bg-green-500/20'
                   }`}>
                     {tx.type === 'send' ? (
-                      <ArrowUpIcon className="w-4 h-4 text-white" />
+                        <ArrowUpIcon className="w-5 h-5 text-red-400" />
                     ) : (
-                      <ArrowDownIcon className="w-4 h-4 text-white" />
+                        <ArrowDownIcon className="w-5 h-5 text-green-400" />
                     )}
                   </div>
                   <div>
-                    <p className="font-medium">
-                      {tx.type === 'send' ? 'Sent' : 'Received'}
-                    </p>
-                    <p className="text-sm text-gray-400">
-                      {tx.amount} {tx.network}
+                      <p className="text-white font-medium capitalize">{tx.type}</p>
+                      <p className="text-purple-300 text-sm">
+                        {tx.type === 'send' ? 'To: ' : 'From: '}
+                        {tx.type === 'send' ? tx.to.slice(0, 6) + '...' : tx.from.slice(0, 6) + '...'}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium">
-                    {tx.type === 'send' ? '-' : '+'}{tx.amount}
-                  </p>
-                  <p className="text-sm text-gray-400">
+                    <p className="text-white font-semibold">{tx.amount} ETH</p>
+                    <p className="text-purple-300 text-sm">
                     {new Date(tx.timestamp).toLocaleDateString()}
                   </p>
                 </div>
-              </div>
+                </motion.div>
             ))}
           </div>
+          ) : (
+            <div className="text-center py-8">
+              <ChartBarIcon className="w-12 h-12 text-purple-400 mx-auto mb-4 opacity-50" />
+              <p className="text-purple-300">No transactions yet</p>
+              <p className="text-purple-400 text-sm">Your transaction history will appear here</p>
+          </div>
         )}
+        </motion.div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { getMultipleTokenPrices, get24hPriceChange } from '../utils/web3-utils';
-import { PortfolioData, PortfolioAsset } from '../types';
+import { PortfolioData, PortfolioAsset, PortfolioHistoryEntry } from '../types';
 import toast from 'react-hot-toast';
 
 // Import networks configuration
@@ -60,6 +60,7 @@ interface PortfolioContextType {
   getAssetValue: (network: string, symbol: string) => number;
   getTotalValue: () => number;
   refreshRates: () => Promise<void>;
+  getPortfolioHistory: (days?: number) => Promise<PortfolioHistoryEntry[]>;
 }
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
@@ -117,7 +118,7 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
   };
 
   // Update portfolio with real data
-  const updatePortfolio = async () => {
+  const updatePortfolio = useCallback(async () => {
     setPortfolioState(prev => ({
       ...prev,
       isLoading: true,
@@ -229,7 +230,7 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
       }));
       toast.error('Failed to update portfolio');
     }
-  };
+  }, []);
 
   // Get asset value
   const getAssetValue = (network: string, symbol: string): number => {
@@ -305,14 +306,27 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
     }
   };
 
+  // Get portfolio history
+  const getPortfolioHistory = useCallback(async (days: number = 30): Promise<PortfolioHistoryEntry[]> => {
+    try {
+      const { getPortfolioHistoryData } = await import('../utils/portfolio-utils');
+      const history = await getPortfolioHistoryData(days);
+      return history;
+    } catch (error) {
+      console.error('Failed to get portfolio history:', error);
+      return [];
+    }
+  }, []);
+
   const value: PortfolioContextType = {
     portfolioState: portfolioState,
     portfolioValue: portfolioState.portfolioValue,
-    portfolioHistory: [], // TODO: Implement portfolio history
+    portfolioHistory: [], // Will be populated by getPortfolioHistory when called
     updatePortfolio,
     getAssetValue,
     getTotalValue,
-    refreshRates
+    refreshRates,
+    getPortfolioHistory
   };
 
   return (

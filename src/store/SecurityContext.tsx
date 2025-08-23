@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { hashPassword, verifyPassword } from '../utils/crypto-utils';
 
 interface SecurityState {
@@ -48,6 +48,8 @@ export const SecurityProvider: React.FC<SecurityProviderProps> = ({ children }) 
     failedAttempts: 0,
     lastActivity: Date.now()
   });
+  
+  const lastActivityRef = useRef(Date.now());
 
   // Load security settings from storage
   useEffect(() => {
@@ -68,7 +70,7 @@ export const SecurityProvider: React.FC<SecurityProviderProps> = ({ children }) 
 
     const checkActivity = () => {
       const now = Date.now();
-      const timeSinceLastActivity = now - securityState.lastActivity;
+      const timeSinceLastActivity = now - lastActivityRef.current;
       const timeoutMs = securityState.autoLockTimeout * 60 * 1000;
 
       if (timeSinceLastActivity > timeoutMs) {
@@ -78,15 +80,17 @@ export const SecurityProvider: React.FC<SecurityProviderProps> = ({ children }) 
 
     const interval = setInterval(checkActivity, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, [securityState.isWalletUnlocked, securityState.lastActivity, securityState.autoLockTimeout]);
+  }, [securityState.isWalletUnlocked]); // Removed securityState.autoLockTimeout from dependencies
 
   // Update last activity
-  const updateLastActivity = () => {
+  const updateLastActivity = useCallback(() => {
+    const now = Date.now();
+    lastActivityRef.current = now;
     setSecurityState(prev => ({
       ...prev,
-      lastActivity: Date.now()
+      lastActivity: now
     }));
-  };
+  }, []);
 
   // Security functions with real implementations
   const authenticate = async (password: string): Promise<boolean> => {

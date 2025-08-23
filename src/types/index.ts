@@ -33,8 +33,17 @@ export interface Wallet {
   updatedAt: Date;
 }
 
-// Alias WalletData to Wallet for compatibility
-export type WalletData = Wallet;
+// WalletData interface for wallet manager compatibility
+export interface WalletData {
+  id: string;
+  name: string;
+  seedPhrase: string;
+  encryptedSeedPhrase: string;
+  accounts: WalletAccount[];
+  network: string;
+  createdAt: number;
+  lastAccessed: number;
+}
 
 export interface WalletAccount {
   id: string;
@@ -45,6 +54,9 @@ export interface WalletAccount {
   network: string;
   balance: string;
   isActive: boolean;
+  derivationPath: string;
+  nonce: number;
+  createdAt: number;
 }
 
 export interface Transaction {
@@ -142,6 +154,16 @@ export interface PortfolioValue {
   totalValueUSD: string;
   change24h: string;
   change24hPercent: number;
+}
+
+export interface PortfolioHistoryEntry {
+  date: string;
+  timestamp: number;
+  totalValue: string;
+  totalValueUSD: string;
+  change24h: string;
+  change24hPercent: number;
+  assets: PortfolioAsset[];
 }
 
 export interface NotificationType {

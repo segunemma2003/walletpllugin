@@ -4,13 +4,13 @@ import { ArrowLeft, Send, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { ethers } from 'ethers';
 import { useWallet } from '../../store/WalletContext';
 import { useTransaction } from '../../store/TransactionContext';
-import { estimateGas } from '../../utils/web3-utils';
+// Remove unused import - using blockchain-utils instead
 import { TransactionManager } from '../../core/transaction-manager';
 import toast from 'react-hot-toast';
 import type { ScreenProps } from '../../types/index';
 
 const SendScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
-  const { wallet, currentNetwork } = useWallet();
+  const { currentWallet } = useWallet();
   const { addTransaction } = useTransaction();
   const transactionManager = new TransactionManager();
   
@@ -26,10 +26,10 @@ const SendScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
 
   // Load wallet balance
   useEffect(() => {
-    if (wallet?.address) {
+    if (currentWallet?.address) {
       loadBalance();
     }
-  }, [wallet?.address]);
+  }, [currentWallet?.address]);
 
   // Validate address
   useEffect(() => {
@@ -48,45 +48,33 @@ const SendScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
 
   const loadBalance = async () => {
     try {
-      if (wallet?.address && currentNetwork) {
-        const balance = await fetch(`https://mainnet.infura.io/v3/${window.CONFIG?.INFURA_PROJECT_ID || ''}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'eth_getBalance',
-            params: [wallet.address, 'latest'],
-            id: 1
-          })
-        });
-        
-        const data = await balance.json();
-        if (data.result) {
-          const balanceInEth = ethers.formatEther(data.result);
-          setBalance(balanceInEth);
-        }
+      if (currentWallet?.address) {
+        // Use REAL blockchain integration
+        const { getBalance } = await import('../../utils/blockchain-utils');
+        const balance = await getBalance(currentWallet.address);
+        setBalance(balance);
       }
     } catch (error) {
       console.error('Error loading balance:', error);
+      setBalance('0');
     }
   };
 
   const estimateGasFee = async () => {
     try {
-      if (!wallet?.address || !isValidAddress || !amount) return;
+      if (!currentWallet?.address || !isValidAddress || !amount) return;
 
-      const gasEstimate = await estimateGas(
-        wallet.address,
-        toAddress,
-        amount,
-        '0x',
-        currentNetwork?.id || 'ethereum'
-      );
-
-      const gasPriceWei = gasPrice ? ethers.parseUnits(gasPrice, 'gwei') : ethers.parseUnits('20', 'gwei');
+      // Use REAL blockchain integration
+      const { estimateGas, getCurrentGasPrice } = await import('../../utils/blockchain-utils');
+      const gasEstimate = await estimateGas(currentWallet.address, toAddress, amount);
+      
+      const currentGasPrice = gasPrice || await getCurrentGasPrice();
+      const gasPriceWei = ethers.parseUnits(currentGasPrice, 'gwei');
       const fee = BigInt(gasEstimate) * gasPriceWei;
+      
       setEstimatedFee(ethers.formatEther(fee));
       setGasLimit(gasEstimate.toString());
+      setGasPrice(currentGasPrice);
     } catch (error) {
       console.error('Error estimating gas:', error);
       setEstimatedFee('0');
@@ -97,6 +85,49 @@ const SendScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
     if (!isValidAddress || !amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid address and amount');
       return;
+    }
+
+    if (!currentWallet?.privateKey) {
+      toast.error('Wallet not unlocked');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Use REAL blockchain integration
+      const { sendTransaction: sendBlockchainTransaction } = await import('../../utils/blockchain-utils');
+      const txHash = await sendBlockchainTransaction(
+        currentWallet.address,
+        toAddress,
+        amount,
+        currentWallet.privateKey,
+        gasPrice,
+        gasLimit
+      );
+      
+      toast.success(`Transaction sent! Hash: ${txHash.slice(0, 10)}...`);
+      
+      // Add to transaction history
+      addTransaction({
+        hash: txHash,
+        from: currentWallet.address,
+        to: toAddress,
+        value: amount,
+        network: 'ethereum',
+        status: 'pending',
+        nonce: 0, // Will be updated when confirmed
+        amount: amount,
+        fee: estimatedFee,
+        type: 'send'
+      });
+      
+      // Navigate back to dashboard
+      onNavigate('dashboard');
+    } catch (error) {
+      console.error('Send error:', error);
+      toast.error('Failed to send transaction. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
 
     if (!password) {
@@ -151,17 +182,17 @@ const SendScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="h-full bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
       {/* Header */}
-      <div className="px-4 py-3 bg-white border-b border-gray-200">
+      <div className="px-4 py-3 bg-white/10 backdrop-blur-lg border-b border-white/20">
         <div className="flex justify-between items-center">
           <button
             onClick={() => onNavigate('dashboard')}
-            className="p-2 rounded-lg hover:bg-gray-100"
+            className="p-2 rounded-lg hover:bg-white/20"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowLeft className="w-5 h-5 text-white" />
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">Send ETH</h1>
+          <h1 className="text-lg font-semibold text-white">Send ETH</h1>
           <div className="w-9"></div>
         </div>
       </div>
@@ -169,9 +200,9 @@ const SendScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
       {/* Content */}
       <div className="p-4 space-y-4">
         {/* Balance */}
-        <div className="p-4 bg-white rounded-xl">
-          <div className="text-sm text-gray-600 mb-1">Available Balance</div>
-          <div className="text-xl font-bold text-gray-900">{parseFloat(balance).toFixed(4)} ETH</div>
+        <div className="p-4 bg-white/10 backdrop-blur-lg rounded-xl border border-white/20">
+          <div className="text-sm text-purple-200 mb-1">Available Balance</div>
+          <div className="text-xl font-bold text-white">{parseFloat(balance).toFixed(4)} ETH</div>
         </div>
 
         {/* Recipient Address */}

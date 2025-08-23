@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { WalletProvider, useWallet } from '../store/WalletContext';
+import { autoLockManager } from '../utils/auto-lock';
 import { NetworkProvider } from '../store/NetworkContext';
 import { PortfolioProvider } from '../store/PortfolioContext';
 import { NFTProvider } from '../store/NFTContext';
@@ -19,7 +21,7 @@ import NetworksScreen from '../components/screens/NetworksScreen';
 import NFTScreen from '../components/screens/NFTScreen';
 import PortfolioScreen from '../components/screens/PortfolioScreen';
 import TransactionsScreen from '../components/screens/TransactionsScreen';
-import TransactionHistoryScreen from '../components/screens/TransactionHistoryScreen';
+// Remove unused import
 import WalletConnectScreen from '../components/screens/WalletConnectScreen';
 import LoadingScreen from '../components/screens/LoadingScreen';
 import ErrorScreen from '../components/screens/ErrorScreen';
@@ -28,12 +30,63 @@ import Navigation from '../components/common/Navigation';
 import NotificationBanner from '../components/common/NotificationBanner';
 
 const PopupContent: React.FC = () => {
-  const { currentWallet, isUnlocked, error } = useWallet();
   const [currentScreen, setCurrentScreen] = useState<ScreenId>('welcome');
   const [notification, setNotification] = useState<NotificationType | null>(null);
+  const isCreatingWalletRef = useRef(false);
+  
+  // Get wallet context safely
+  const walletData = useWallet();
+  const { currentWallet, isUnlocked, error: walletError } = walletData;
+
+  // Set up auto-lock activity monitoring
+  useEffect(() => {
+    if (isUnlocked) {
+      autoLockManager.recordActivity();
+    }
+  }, [currentScreen, isUnlocked]);
+
+  // Check for verified seed phrase and create wallet if needed
+  useEffect(() => {
+    const verifiedSeedPhrase = localStorage.getItem('verifiedSeedPhrase');
+    if (verifiedSeedPhrase && !currentWallet && currentScreen === 'dashboard' && !isCreatingWalletRef.current) {
+      // Create wallet from verified seed phrase
+      const createWalletFromVerifiedSeed = async () => {
+        isCreatingWalletRef.current = true;
+        try {
+          // Generate a secure password based on the seed phrase
+          const securePassword = btoa(verifiedSeedPhrase).substring(0, 16);
+          console.log('Creating wallet from verified seed phrase...');
+          await walletData.importWallet(verifiedSeedPhrase, securePassword);
+          localStorage.removeItem('verifiedSeedPhrase');
+          console.log('Wallet created successfully!');
+          toast.success('Wallet created successfully!');
+          
+          // Auto-unlock the wallet after creation
+          try {
+            await walletData.unlockWallet(securePassword);
+            console.log('Wallet unlocked successfully!');
+          } catch (unlockError) {
+            console.error('Failed to auto-unlock wallet:', unlockError);
+            // Don't throw here, just log the error
+          }
+        } catch (error) {
+          console.error('Failed to create wallet from verified seed:', error);
+          toast.error('Failed to create wallet. Please try again.');
+          setCurrentScreen('welcome');
+        } finally {
+          isCreatingWalletRef.current = false;
+        }
+      };
+      createWalletFromVerifiedSeed();
+    }
+  }, [currentWallet, currentScreen]);
 
   const handleNavigate = (screen: ScreenId) => {
     setCurrentScreen(screen);
+    // Record activity on navigation
+    if (isUnlocked) {
+      autoLockManager.recordActivity();
+    }
   };
 
   const handleDismissNotification = () => {
@@ -46,22 +99,17 @@ const PopupContent: React.FC = () => {
   };
 
   // Show loading if wallet is initializing
-  if (!currentWallet && !isUnlocked) {
-    return <LoadingScreen {...screenProps} />;
+  if (!currentWallet && !isUnlocked && currentScreen === 'loading') {
+    return <LoadingScreen message="Initializing wallet..." />;
   }
 
   // Show error if there's an error
-  if (error) {
+  if (walletError) {
     return <ErrorScreen {...screenProps} />;
   }
 
-  // Show welcome if no wallet exists
-  if (!currentWallet) {
-    return <WelcomeScreen {...screenProps} />;
-  }
-
-  // Show wallet creation/import screens if wallet exists but not unlocked
-  if (!isUnlocked) {
+  // Show wallet creation/import/verify screens if no wallet exists or wallet is not unlocked
+  if (!currentWallet || !isUnlocked) {
     switch (currentScreen) {
       case 'create':
         return <CreateWalletScreen {...screenProps} />;
@@ -69,6 +117,9 @@ const PopupContent: React.FC = () => {
         return <ImportWalletScreen {...screenProps} />;
       case 'verify':
         return <VerifySeedScreen {...screenProps} />;
+      case 'dashboard':
+        // If navigating to dashboard but no wallet exists, show welcome
+        return <WelcomeScreen {...screenProps} />;
       default:
         return <WelcomeScreen {...screenProps} />;
     }
@@ -96,9 +147,9 @@ const PopupContent: React.FC = () => {
       case 'transactions':
         return <TransactionsScreen {...screenProps} />;
       case 'walletconnect':
-        return <WalletConnectScreen {...screenProps} />;
+        return <WalletConnectScreen />;
       case 'loading':
-        return <LoadingScreen {...screenProps} />;
+        return <LoadingScreen message="Loading..." />;
       case 'error':
         return <ErrorScreen {...screenProps} />;
       default:

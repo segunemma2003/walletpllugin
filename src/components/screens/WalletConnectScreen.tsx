@@ -2,28 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, ExternalLink, Settings } from 'lucide-react';
 import { WalletConnectModal } from '../common/WalletConnectModal';
 import { WalletConnectSessions } from '../common/WalletConnectSessions';
-import { walletConnectManager, WalletConnectSession } from '../../utils/walletconnect-utils';
+import { walletConnectManager, initializeWalletConnect, connectToDApp, disconnectFromDApp } from '../../utils/walletconnect-utils';
 
 export const WalletConnectScreen: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sessions, setSessions] = useState<WalletConnectSession[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [connectionUri, setConnectionUri] = useState('');
 
   useEffect(() => {
     loadSessions();
   }, []);
 
-  const loadSessions = () => {
-    const session = walletConnectManager.getSession();
-    if (session) {
-      setSessions([session]);
-    } else {
+  const loadSessions = async () => {
+    try {
+      await initializeWalletConnect();
+      const activeSessions = walletConnectManager.getAllSessions();
+      setSessions(activeSessions);
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
       setSessions([]);
     }
     setIsLoading(false);
   };
 
-  const handleConnected = (session: WalletConnectSession) => {
+  const handleConnected = (session: any) => {
     setSessions([session]);
     setIsModalOpen(false);
   };

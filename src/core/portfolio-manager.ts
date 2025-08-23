@@ -77,13 +77,13 @@ export class PortfolioManager {
   // Update portfolio with real data
   async updatePortfolio(): Promise<PortfolioValue> {
     try {
-      // Get wallet address from storage
-      const walletData = await this.getWalletFromStorage();
-      if (!walletData?.address) {
+      // Get wallet from storage
+      const wallet = await this.getWalletFromStorage();
+      if (!wallet?.address) {
         throw new Error('No wallet found');
       }
 
-      const address = walletData.address;
+      const address = wallet.address;
       const networks = ['ethereum', 'bsc', 'polygon', 'avalanche', 'arbitrum', 'optimism'];
       const assets = [];
 

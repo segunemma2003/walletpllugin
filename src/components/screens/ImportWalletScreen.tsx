@@ -38,11 +38,11 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="h-full bg-gray-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white p-6">
       <div className="max-w-sm mx-auto">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Import Wallet</h2>
-          <p className="text-gray-600">
+          <h2 className="text-2xl font-bold text-white mb-2">Import Wallet</h2>
+          <p className="text-purple-200">
             Import an existing wallet using seed phrase or private key
           </p>
         </div>
@@ -54,23 +54,23 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
               onClick={() => setImportMethod('seed')}
               className={`p-3 rounded-lg border-2 transition-colors ${
                 importMethod === 'seed'
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  ? 'border-purple-500 bg-purple-500/20 text-white'
+                  : 'border-white/20 bg-white/10 text-white hover:border-white/30'
               }`}
             >
               <div className="text-sm font-medium">Seed Phrase</div>
-              <div className="text-xs text-gray-500 mt-1">12 or 24 words</div>
+              <div className="text-xs text-purple-300 mt-1">12 or 24 words</div>
             </button>
             <button
               onClick={() => setImportMethod('privateKey')}
               className={`p-3 rounded-lg border-2 transition-colors ${
                 importMethod === 'privateKey'
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  ? 'border-purple-500 bg-purple-500/20 text-white'
+                  : 'border-white/20 bg-white/10 text-white hover:border-white/30'
               }`}
             >
               <div className="text-sm font-medium">Private Key</div>
-              <div className="text-xs text-gray-500 mt-1">64 character hex</div>
+              <div className="text-xs text-purple-300 mt-1">64 character hex</div>
             </button>
           </div>
         </div>
@@ -85,16 +85,16 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
           {importMethod === 'seed' ? (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Seed Phrase
                 </label>
                 <textarea
                   value={seedPhrase}
                   onChange={(e) => handleSeedPhraseChange(e.target.value)}
                   placeholder="Enter your 12 or 24 word seed phrase"
-                  className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  className="w-full h-24 px-3 py-2 bg-white/5 border border-white/20 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-white placeholder-purple-300"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-purple-300 mt-1">
                   Separate words with spaces
                 </p>
               </div>
@@ -102,7 +102,7 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Private Key
                 </label>
                 <div className="relative">
@@ -110,22 +110,19 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
                     type={showPrivateKey ? 'text' : 'password'}
                     value={privateKey}
                     onChange={(e) => handlePrivateKeyChange(e.target.value)}
-                    placeholder="Enter your private key (0x...)"
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="Enter your private key"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-purple-300"
                   />
                   <button
+                    type="button"
                     onClick={() => setShowPrivateKey(!showPrivateKey)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded hover:bg-gray-100"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-purple-300 hover:text-white"
                   >
-                    {showPrivateKey ? (
-                      <EyeOff className="w-4 h-4 text-gray-500" />
-                    ) : (
-                      <Eye className="w-4 h-4 text-gray-500" />
-                    )}
+                    {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Your private key should start with 0x
+                <p className="text-xs text-purple-300 mt-1">
+                  64 character hexadecimal string
                 </p>
               </div>
             </div>
@@ -135,15 +132,15 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
           {seedPhrase || privateKey ? (
             <div className={`p-3 rounded-lg ${
               isValid 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-red-50 border border-red-200'
+                ? 'bg-green-500/10 border border-green-500/30' 
+                : 'bg-red-500/10 border border-red-500/30'
             }`}>
               <div className="flex items-center">
                 <div className={`w-2 h-2 rounded-full mr-2 ${
-                  isValid ? 'bg-green-500' : 'bg-red-500'
+                  isValid ? 'bg-green-400' : 'bg-red-400'
                 }`} />
                 <span className={`text-sm ${
-                  isValid ? 'text-green-700' : 'text-red-700'
+                  isValid ? 'text-green-300' : 'text-red-300'
                 }`}>
                   {isValid ? 'Valid format' : 'Invalid format'}
                 </span>
@@ -153,7 +150,7 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
         </motion.div>
 
         {/* Security Warning */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 mt-6">
+        <div className="bg-yellow-500/10 backdrop-blur-lg border border-yellow-500/30 rounded-lg p-4 mb-6 mt-6">
           <div className="flex items-start">
             <div className="flex-shrink-0">
               <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
@@ -161,8 +158,8 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">Security Notice</h3>
-              <div className="mt-2 text-sm text-yellow-700">
+              <h3 className="text-sm font-medium text-yellow-300">Security Notice</h3>
+              <div className="mt-2 text-sm text-yellow-200">
                 <p>Never share your seed phrase or private key with anyone. This information gives full access to your wallet.</p>
               </div>
             </div>
@@ -177,8 +174,8 @@ const ImportWalletScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
           disabled={!isValid}
           className={`w-full font-semibold py-4 px-6 rounded-xl shadow-lg transition-colors ${
             isValid
-              ? 'bg-primary-600 text-white hover:bg-primary-700'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
+              : 'bg-gray-500/50 text-gray-400 cursor-not-allowed'
           }`}
         >
           Import Wallet

@@ -797,21 +797,41 @@ export const getProvider = (network: string) => {
 }; 
 
 // Add missing sendTransaction export
-export const sendTransaction = async (transaction: any, privateKey: string): Promise<string> => {
+export const sendTransaction = async (
+  fromAddress: string,
+  toAddress: string,
+  amount: string,
+  privateKey: string,
+  networkId: string = 'ethereum',
+  gasPrice?: string,
+  gasLimit?: string
+): Promise<string> => {
   try {
-    const wallet = new ethers.Wallet(privateKey);
-    const provider = new ethers.JsonRpcProvider(transaction.rpcUrl || 'https://mainnet.infura.io/v3/your-project-id');
-    const connectedWallet = wallet.connect(provider);
-    
-    const tx = await connectedWallet.sendTransaction({
-      to: transaction.to,
-      value: ethers.parseEther(transaction.value || '0'),
-      gasPrice: transaction.gasPrice ? ethers.parseUnits(transaction.gasPrice, 'gwei') : undefined,
-      gasLimit: transaction.gasLimit ? BigInt(transaction.gasLimit) : BigInt(21000),
-      data: transaction.data || '0x'
-    });
-    
-    return tx.hash;
+    const network = NETWORKS[networkId];
+    if (!network) {
+      throw new Error(`Network ${networkId} not supported`);
+    }
+
+    const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+    const wallet = new ethers.Wallet(privateKey, provider);
+
+    // Get current gas price if not provided
+    let currentGasPrice = gasPrice;
+    if (!currentGasPrice) {
+      const feeData = await provider.getFeeData();
+      currentGasPrice = ethers.formatUnits(feeData.gasPrice || 0, 'gwei');
+    }
+
+    const tx = {
+      to: toAddress,
+      value: ethers.parseEther(amount),
+      gasPrice: ethers.parseUnits(currentGasPrice, 'gwei'),
+      gasLimit: gasLimit ? BigInt(gasLimit) : BigInt(21000)
+    };
+
+    const transaction = await wallet.sendTransaction(tx);
+    console.log('Transaction sent:', transaction.hash);
+    return transaction.hash;
   } catch (error) {
     console.error('Error sending transaction:', error);
     throw error;

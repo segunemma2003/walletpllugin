@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import type { ScreenProps } from '../../types/index';
 
 const ReceiveScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
-  const { wallet, currentNetwork } = useWallet();
+  const { currentWallet, currentNetwork } = useWallet();
   const [copied, setCopied] = useState(false);
   const [qrSize, setQrSize] = useState(200);
 
@@ -20,69 +20,92 @@ const ReceiveScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
   };
 
   useEffect(() => {
-    if (wallet?.address) {
+    if (currentWallet?.address) {
       // Generate QR code data URL for the address
-      const qrData = generateQRCode(wallet.address);
       setQrSize(200); // Ensure QR size is 200 for qrcode.react
     }
-  }, [wallet?.address, currentNetwork?.symbol]);
+  }, [currentWallet?.address, currentNetwork?.symbol]);
 
   const copyAddress = async () => {
-    if (!wallet?.address) return;
+    if (!currentWallet?.address) return;
     
     try {
-      await navigator.clipboard.writeText(wallet.address);
+      await navigator.clipboard.writeText(currentWallet.address);
       setCopied(true);
       toast.success('Address copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch (err) {
       toast.error('Failed to copy address');
     }
   };
 
   const downloadQRCode = () => {
-    if (!wallet?.address) return;
+    if (!currentWallet?.address) return;
     
-    // Create a simple QR code using canvas (in a real app, you'd use a QR library)
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    canvas.width = 200;
-    canvas.height = 200;
-    
-    // Draw a simple QR-like pattern (this is a placeholder)
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 200, 200);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(10, 10, 180, 180);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(20, 20, 160, 160);
-    
-    // Add text
-    ctx.fillStyle = '#000';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('QR Code', 100, 190);
-    
-    // Download
-    const link = document.createElement('a');
-    link.download = 'paycio-address-qr.png';
-    link.href = canvas.toDataURL();
-    link.click();
+    // Generate real QR code using qrcode library
+    import('qrcode').then((QRCode) => {
+      QRCode.toCanvas(document.createElement('canvas'), currentWallet.address, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      }, (err, canvas) => {
+        if (err) {
+          console.error('Error generating QR code:', err);
+          return;
+        }
+        
+        // Download
+        const link = document.createElement('a');
+        link.download = 'paycio-address-qr.png';
+        link.href = canvas.toDataURL();
+        link.click();
+      });
+    }).catch((error) => {
+      console.error('Failed to load QR code library:', error);
+      // Fallback to basic canvas
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      canvas.width = 200;
+      canvas.height = 200;
+      
+      // Draw a simple QR-like pattern as fallback
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 200, 200);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(10, 10, 180, 180);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(20, 20, 160, 160);
+      
+      // Add text
+      ctx.fillStyle = '#000';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('QR Code', 100, 190);
+      
+      // Download
+      const link = document.createElement('a');
+      link.download = 'paycio-address-qr.png';
+      link.href = canvas.toDataURL();
+      link.click();
+    });
   };
 
   const shareAddress = async () => {
-    if (!wallet?.address) return;
+    if (!currentWallet?.address) return;
     
     if (navigator.share) {
       try {
         await navigator.share({
           title: 'PayCio Wallet Address',
-          text: `My PayCio wallet address: ${wallet.address}`,
-          url: `ethereum:${wallet.address}`
+          text: `My PayCio wallet address: ${currentWallet.address}`,
+          url: `ethereum:${currentWallet.address}`
         });
-      } catch (error) {
+      } catch (err) {
         console.log('Share cancelled');
       }
     } else {
@@ -95,122 +118,119 @@ const ReceiveScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  if (!wallet?.address) {
+  if (!currentWallet?.address) {
     return (
-      <div className="h-full bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-gray-500 mb-4">No wallet found</div>
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg"
-          >
-            Go to Dashboard
-          </button>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto mb-6"></div>
+          <p className="text-white text-lg">Loading wallet...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
       {/* Header */}
-      <div className="px-4 py-3 bg-white border-b border-gray-200">
-        <div className="flex justify-between items-center">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between p-6 border-b border-white/10"
+      >
           <button
             onClick={() => onNavigate('dashboard')}
-            className="p-2 rounded-lg hover:bg-gray-100"
+          className="flex items-center text-purple-200 hover:text-white"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">Receive ETH</h1>
-          <div className="w-9"></div>
-        </div>
-      </div>
+        <h1 className="text-xl font-bold text-white">Receive</h1>
+        <div className="w-10"></div> {/* Spacer */}
+      </motion.div>
 
-      {/* Content */}
-      <div className="p-4 space-y-6">
+      <div className="p-6 space-y-6">
+        {/* QR Code Section */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20"
+        >
+          <div className="text-center">
+            <h2 className="text-lg font-semibold text-white mb-4">Your Address</h2>
+            
         {/* QR Code */}
-        <div className="p-6 bg-white rounded-xl text-center">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Your Address</h2>
-            <p className="text-sm text-gray-600">
-              Share this address to receive ETH and other ERC-20 tokens
-            </p>
-          </div>
-          
-          {/* QR Code Placeholder */}
-          <div className="mx-auto mb-4 w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-            <QRCodeSVG value={generateQRCode(wallet.address)} size={qrSize} />
+            <div className="bg-white rounded-xl p-4 inline-block mb-6">
+              <QRCodeSVG
+                value={generateQRCode(currentWallet.address)}
+                size={qrSize}
+                level="M"
+                includeMargin={true}
+              />
           </div>
 
           {/* Address Display */}
-          <div className="p-3 bg-gray-50 rounded-lg mb-4">
-            <div className="text-sm text-gray-600 mb-1">Wallet Address</div>
-            <div className="font-mono text-sm text-gray-900 break-all">
-              {wallet.address}
-            </div>
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-4">
+              <p className="text-sm text-purple-200 mb-2">Address</p>
+              <p className="font-mono text-white break-all">{currentWallet.address}</p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-3 gap-3">
+            {/* Copy Button */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={copyAddress}
-              className="flex flex-col items-center p-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors flex items-center justify-center"
             >
               {copied ? (
-                <Check className="w-5 h-5 text-green-600 mb-1" />
+                <>
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copied!
+                </>
               ) : (
-                <Copy className="w-5 h-5 text-blue-600 mb-1" />
+                <>
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Address
+                </>
               )}
-              <span className="text-xs text-gray-700">
-                {copied ? 'Copied!' : 'Copy'}
-              </span>
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={downloadQRCode}
-              className="flex flex-col items-center p-3 rounded-lg bg-green-50 hover:bg-green-100 transition-colors"
-            >
-              <Download className="w-5 h-5 text-green-600 mb-1" />
-              <span className="text-xs text-gray-700">Download</span>
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={shareAddress}
-              className="flex flex-col items-center p-3 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors"
-            >
-              <Share2 className="w-5 h-5 text-purple-600 mb-1" />
-              <span className="text-xs text-gray-700">Share</span>
             </motion.button>
           </div>
+        </motion.div>
+
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 gap-4">
+            <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={shareAddress}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-colors"
+          >
+            <Share2 className="w-6 h-6 text-white mx-auto mb-2" />
+            <span className="text-sm text-white">Share</span>
+            </motion.button>
+
+            <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={downloadQRCode}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-colors"
+          >
+            <Download className="w-6 h-6 text-white mx-auto mb-2" />
+            <span className="text-sm text-white">Download QR</span>
+            </motion.button>
         </div>
 
-        {/* Instructions */}
-        <div className="p-4 bg-blue-50 rounded-xl">
-          <h3 className="font-semibold text-blue-900 mb-2">How to receive ETH</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Share your address with the sender</li>
-            <li>• They can scan the QR code or copy the address</li>
-            <li>• Transactions typically confirm in 1-3 minutes</li>
-            <li>• You'll see the balance update automatically</li>
-          </ul>
+        {/* Network Info */}
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-purple-200">Network</p>
+              <p className="text-white font-semibold">{currentNetwork?.name || 'Ethereum'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-purple-200">Symbol</p>
+              <p className="text-white font-semibold">{currentNetwork?.symbol || 'ETH'}</p>
+            </div>
         </div>
-
-        {/* Security Notice */}
-        <div className="p-4 bg-yellow-50 rounded-xl">
-          <h3 className="font-semibold text-yellow-900 mb-2">Security Tips</h3>
-          <ul className="text-sm text-yellow-800 space-y-1">
-            <li>• Only share this address with trusted sources</li>
-            <li>• Double-check the address before sharing</li>
-            <li>• Never share your private key or seed phrase</li>
-            <li>• This address is safe to share publicly</li>
-          </ul>
         </div>
       </div>
     </div>
