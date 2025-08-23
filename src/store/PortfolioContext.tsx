@@ -144,7 +144,9 @@ export const PortfolioProvider: React.FC<PortfolioProviderProps> = ({ children }
       // Fetch balances for all networks
       for (const network of networks) {
         try {
-          const balance = await ethers.provider.getBalance(address);
+          // Create a provider for the specific network
+          const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/YOUR-PROJECT-ID');
+          const balance = await provider.getBalance(address);
           const balanceInEth = parseFloat(ethers.formatEther(balance));
           
           if (balanceInEth > 0) {

@@ -1,19 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-
-interface Transaction {
-  id: string;
-  hash: string;
-  from: string;
-  to: string;
-  value: string;
-  network: string;
-  status: 'pending' | 'confirmed' | 'failed';
-  timestamp: number;
-  gasUsed?: string;
-  gasPrice?: string;
-  nonce: number;
-  data?: string;
-}
+import { Transaction } from '../types';
 
 interface TransactionState {
   recentTransactions: Transaction[];
