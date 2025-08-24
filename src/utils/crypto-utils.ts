@@ -5,7 +5,9 @@ import bcrypt from 'bcryptjs';
 
 // Generate BIP39 seed phrase (real implementation)
 export function generateBIP39SeedPhrase(): string {
-  return bip39.generateMnemonic(256); // 24 words for maximum security
+  // Use 128 bits (12 words) for standard security
+  // This is the most commonly used and well-tested entropy size
+  return bip39.generateMnemonic(128);
 }
 
 // Validate BIP39 seed phrase (real implementation)

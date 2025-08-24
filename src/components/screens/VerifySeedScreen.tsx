@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, X, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useWallet } from '../../store/WalletContext';
 import type { ScreenProps } from '../../types/index';
 
 const VerifySeedScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
+  const { createWallet } = useWallet();
   const [verificationWords, setVerificationWords] = useState<string[]>([]);
   const [userInputs, setUserInputs] = useState<string[]>([]);
   const [isVerified, setIsVerified] = useState(false);
   const [attempts, setAttempts] = useState(0);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Get stored seed phrase from temporary storage
-  // TODO: Replace with proper wallet context integration when available
   const getStoredSeedPhrase = (): string => {
     return localStorage.getItem('tempSeedPhrase') || '';
   };
@@ -54,9 +56,19 @@ const VerifySeedScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
       // Clean up temporary storage
       localStorage.removeItem('tempSeedPhrase');
       
-      setTimeout(() => {
-        onNavigate('dashboard');
-      }, 1500);
+      // Actually create the wallet
+      setIsCreating(true);
+      try {
+        await createWallet('My Wallet', 'password123'); // TODO: Get password from user
+        toast.success('Wallet created successfully!');
+        setTimeout(() => {
+          onNavigate('dashboard');
+        }, 1500);
+      } catch (error) {
+        toast.error('Failed to create wallet. Please try again.');
+        setIsCreating(false);
+        setIsVerified(false);
+      }
     } else {
       setAttempts(attempts + 1);
       toast.error('Incorrect words. Please try again.');
@@ -162,13 +174,27 @@ const VerifySeedScreen: React.FC<ScreenProps> = ({ onNavigate }) => {
               className="text-center"
             >
               <div className="mb-6">
-                <div className="flex justify-center items-center mx-auto mb-4 w-16 h-16 rounded-full bg-green-500/20 backdrop-blur-lg border border-green-500/30">
-                  <Check className="w-8 h-8 text-green-400" />
-                </div>
-                <h3 className="mb-2 text-xl font-bold text-white">Verification Successful!</h3>
-                <p className="text-purple-200">
-                  Your wallet is being created...
-                </p>
+                {isCreating ? (
+                  <>
+                    <div className="flex justify-center items-center mx-auto mb-4 w-16 h-16 rounded-full bg-blue-500/20 backdrop-blur-lg border border-blue-500/30">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                    </div>
+                    <h3 className="mb-2 text-xl font-bold text-white">Creating Wallet...</h3>
+                    <p className="text-purple-200">
+                      Please wait while we set up your wallet securely.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-center items-center mx-auto mb-4 w-16 h-16 rounded-full bg-green-500/20 backdrop-blur-lg border border-green-500/30">
+                      <Check className="w-8 h-8 text-green-400" />
+                    </div>
+                    <h3 className="mb-2 text-xl font-bold text-white">Verification Successful!</h3>
+                    <p className="text-purple-200">
+                      Your wallet has been created successfully!
+                    </p>
+                  </>
+                )}
               </div>
             </motion.div>
           )}

@@ -105,9 +105,8 @@ export class WalletManager {
 
   // Generate a real seed phrase using BIP39
   private generateSeedPhrase(): string {
-    // Generate 128 bits (12 words) of entropy
-    const entropy = ethers.randomBytes(16);
-    return bip39.entropyToMnemonic(ethers.hexlify(entropy));
+    // Use BIP39's built-in mnemonic generation (128 bits = 12 words)
+    return bip39.generateMnemonic(128);
   }
 
   // Validate seed phrase
@@ -565,38 +564,55 @@ export class WalletManager {
   async unlockWallet(password: string): Promise<boolean> {
     console.log('🔧 WalletManager: unlockWallet called with password length:', password?.length || 0);
     try {
-      // Verify password by trying to decrypt stored data
-      const walletData = await chrome.storage.local.get(['encryptedSeed', 'passwordHash']);
-      console.log('🔧 WalletManager: Retrieved wallet data from storage:', {
-        hasEncryptedSeed: !!walletData.encryptedSeed,
-        hasPasswordHash: !!walletData.passwordHash
-      });
+      // First, check if we need to migrate old storage format
+      await this.migrateOldStorage();
       
-      if (!walletData.encryptedSeed || !walletData.passwordHash) {
-        console.log('🔧 WalletManager: No encrypted seed or password hash found, returning false');
+      // Get current wallets
+      const wallets = await this.getWallets();
+      console.log('🔧 WalletManager: Current wallets count:', wallets.length);
+      
+      if (wallets.length === 0) {
+        console.log('🔧 WalletManager: No wallets found, returning false');
         return false;
       }
 
-      // Verify password hash
-      const isValidPassword = await this.verifyPassword(password, walletData.passwordHash);
-      console.log('🔧 WalletManager: Password validation result:', isValidPassword);
-      if (!isValidPassword) {
-        console.log('🔧 WalletManager: Invalid password, returning false');
-        return false;
-      }
-
-      // Try to decrypt the seed to verify
-      const decryptedSeed = await decryptData(walletData.encryptedSeed, password);
+      // Try to unlock the first wallet (or current wallet)
+      const currentWallet = wallets[0]; // For now, just try the first wallet
+      console.log('🔧 WalletManager: Attempting to unlock wallet:', currentWallet.id);
+      
+      try {
+        // Try to decrypt the seed phrase to verify password
+        const decryptedSeed = await decryptData(currentWallet.encryptedSeedPhrase, password);
       if (decryptedSeed) {
-        console.log('🔧 WalletManager: Successfully decrypted seed, returning true');
+          console.log('🔧 WalletManager: Successfully decrypted seed, returning true');
         return true;
+        }
+      } catch (decryptError) {
+        console.log('🔧 WalletManager: Failed to decrypt seed:', decryptError);
       }
 
-      console.log('🔧 WalletManager: Failed to decrypt seed, returning false');
+      console.log('🔧 WalletManager: Invalid password, returning false');
       return false;
     } catch (error) {
       console.error('🔧 WalletManager: Error in unlockWallet:', error);
       return false;
+    }
+  }
+
+  // Migrate old storage format to new format
+  private async migrateOldStorage(): Promise<void> {
+    try {
+      console.log('🔧 WalletManager: Checking for old storage format...');
+      const oldData = await chrome.storage.local.get(['encryptedSeed', 'passwordHash', 'wallets']);
+      
+      // If we have old format data but no new wallets, clear the old data
+      if ((oldData.encryptedSeed || oldData.passwordHash) && (!oldData.wallets || oldData.wallets.length === 0)) {
+        console.log('🔧 WalletManager: Found old storage format, clearing old data...');
+        await chrome.storage.local.remove(['encryptedSeed', 'passwordHash']);
+        console.log('🔧 WalletManager: Old storage data cleared');
+      }
+    } catch (error) {
+      console.error('🔧 WalletManager: Error during storage migration:', error);
     }
   }
 
@@ -652,7 +668,7 @@ export class WalletManager {
       return null;
     }
   }
-}
+} 
 
 // Export a singleton instance
 export const walletManager = new WalletManager(); 

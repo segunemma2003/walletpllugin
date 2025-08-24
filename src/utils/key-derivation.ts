@@ -13,7 +13,7 @@ export interface HDWallet {
 // Generate HD wallet from mnemonic
 export const generateHDWallet = async (mnemonic?: string): Promise<HDNodeWallet> => {
   try {
-    const seedPhrase = mnemonic || bip39.generateMnemonic(256);
+    const seedPhrase = mnemonic || bip39.generateMnemonic(128);
     const mnemonicObj = Mnemonic.fromPhrase(seedPhrase);
     const hdWallet = HDNodeWallet.fromMnemonic(mnemonicObj);
     return hdWallet;

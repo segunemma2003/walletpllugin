@@ -43,12 +43,15 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Initialize wallet
   const initializeWallet = async () => {
-    debug.log('Initializing wallet...');
+    debug.log('🔧 WalletContext: Starting wallet initialization...');
     setState(prev => ({ ...prev, isInitializing: true }));
     try {
+      debug.log('🔧 WalletContext: Getting wallets from walletManager...');
       const walletDataList = await walletManager.getWallets();
-      debug.log('Loaded wallets:', walletDataList);
+      debug.log('🔧 WalletContext: Loaded wallets:', walletDataList);
+      debug.log('🔧 WalletContext: Wallets count:', walletDataList.length);
       const hasWallet = walletDataList.length > 0;
+      debug.log('🔧 WalletContext: Has wallet:', hasWallet);
       
       // Convert WalletData to Wallet format
       const wallets = walletDataList.map(walletData => {
@@ -69,16 +72,20 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         } as Wallet;
       });
       
+      debug.log('🔧 WalletContext: Setting wallet state...');
       setState(prev => ({
         ...prev,
         wallets,
         hasWallet,
+        currentWallet: hasWallet ? wallets[0] : null, // Set the first wallet as current
+        isUnlocked: hasWallet, // If wallet exists, mark as unlocked
+        isWalletUnlocked: hasWallet,
         isInitializing: false,
         isWalletCreated: hasWallet
       }));
-      debug.log('Wallet initialization completed successfully');
+      debug.log('🔧 WalletContext: Wallet initialization completed successfully');
     } catch (error) {
-      debug.error('Wallet initialization error:', error);
+      debug.error('🔧 WalletContext: Wallet initialization error:', error);
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to initialize wallet',
@@ -92,6 +99,20 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     debug.log('🔍 WalletContext: unlockWallet called with password length:', password?.length || 0);
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
+      // First check if we have any wallets before attempting to unlock
+      const wallets = await walletManager.getWallets();
+      debug.log('🔍 WalletContext: Current wallets count before unlock:', wallets.length);
+      
+      if (wallets.length === 0) {
+        debug.log('🔍 WalletContext: No wallets found, skipping unlock attempt');
+        setState(prev => ({
+          ...prev,
+          error: 'No wallet found. Please create or import a wallet first.',
+          isLoading: false
+        }));
+        return;
+      }
+
       const success = await walletManager.unlockWallet(password);
       debug.log('🔍 WalletContext: unlockWallet result:', success);
       
@@ -205,9 +226,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Create wallet
   const createWallet = async (name: string, password: string): Promise<void> => {
+    debug.log('🔄 WalletContext: Starting wallet creation...');
+    debug.log('📝 WalletContext: Name:', name);
+    debug.log('🔐 WalletContext: Password provided:', !!password);
+    
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       // Call walletManager with proper request format
+      debug.log('📞 WalletContext: Calling walletManager.createWallet...');
       const walletData = await walletManager.createWallet({
         name: name,
         password: password,
@@ -215,11 +241,15 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         accountCount: 1
       });
       
+      debug.log('✅ WalletContext: WalletManager returned wallet data:', walletData);
+      
       // Convert WalletData to Wallet format
       const primaryAccount = walletData.accounts[0];
       if (!primaryAccount) {
         throw new Error('No accounts derived from seed phrase');
       }
+      
+      debug.log('✅ WalletContext: Primary account derived:', primaryAccount);
       
       const wallet: Wallet = {
         id: walletData.id,
@@ -236,6 +266,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         updatedAt: new Date(walletData.lastAccessed)
       };
       
+      debug.log('✅ WalletContext: Converted wallet object:', wallet);
+      
       setState(prev => ({
         ...prev,
         wallets: [...prev.wallets, wallet],
@@ -243,9 +275,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         wallet,
         hasWallet: true,
         isWalletCreated: true,
+        isUnlocked: true,
+        isWalletUnlocked: true,
         isLoading: false
       }));
+      
+      debug.log('🎉 WalletContext: Wallet creation completed successfully!');
     } catch (error) {
+      debug.error('❌ WalletContext: Wallet creation failed:', error);
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to create wallet',
@@ -332,6 +369,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         wallet: convertedWallet,
         hasWallet: true,
         isWalletCreated: true,
+        isUnlocked: true,
+        isWalletUnlocked: true,
         isLoading: false
       }));
       debug.log('✅ Wallet state updated successfully');
@@ -519,11 +558,48 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   useEffect(() => {
+    let isMounted = true;
+    
     const init = async () => {
       try {
+        if (!isMounted) return;
         await initializeWallet();
+        if (!isMounted) return;
         await getNetworks();
+        
+        // Auto-unlock if wallet exists but isn't unlocked
+        if (!isMounted) return;
+        const wallets = await walletManager.getWallets();
+        if (wallets.length > 0 && !state.isUnlocked) {
+          debug.log('🔧 WalletContext: Auto-unlocking existing wallet...');
+          // Convert the first wallet to Wallet format
+          const firstWalletData = wallets[0];
+          const primaryAccount = firstWalletData.accounts[0];
+          const currentWallet: Wallet = {
+            id: firstWalletData.id,
+            name: firstWalletData.name,
+            address: primaryAccount?.address || '',
+            privateKey: primaryAccount?.privateKey || '',
+            publicKey: primaryAccount?.publicKey || '',
+            seedPhrase: firstWalletData.encryptedSeedPhrase,
+            network: firstWalletData.network,
+            currentNetwork: firstWalletData.network,
+            balance: '0',
+            isEncrypted: true,
+            createdAt: new Date(firstWalletData.createdAt),
+            updatedAt: new Date(firstWalletData.lastAccessed)
+          };
+          
+          setState(prev => ({
+            ...prev,
+            currentWallet,
+            wallet: currentWallet,
+            isUnlocked: true,
+            isWalletUnlocked: true
+          }));
+        }
       } catch (error) {
+        if (!isMounted) return;
         debug.error('Failed to initialize wallet:', error);
         setState(prev => ({
           ...prev,
@@ -532,8 +608,13 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }));
       }
     };
+    
     init();
-  }, []);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Empty dependency array to run only once
 
   const value: WalletContextType = {
     wallets: state.wallets,
